@@ -1,0 +1,24 @@
+{
+  "items": [
+    {
+      "id": 0,
+      "name": "Medical Herb",
+      "category": "consumable",
+      "price": 10,
+      "range": [0, 1],
+      "use_spell": "HEALIN",
+      "spell_level": 1,
+      "description": "Восстанавливает 10 HP"
+    },
+    {
+      "id": 1,
+      "name": "Short Sword",
+      "category": "weapon",
+      "price": 140,
+      "attack": 5,
+      "range": [1, 1],
+      "equip_flags": ["SDMN", "HERO"],
+      "description": "Короткий меч"
+    }
+  ]
+}
