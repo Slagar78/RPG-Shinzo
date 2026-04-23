@@ -1,0 +1,62 @@
+{
+  "actors": [
+    {
+      "id": 0,
+      "name": "MUSHRA",
+      "class": "SDMN",
+      "promoted_class": "HERO",
+      "hp": { "start": 12, "projected": 58, "curve": "LINEAR" },
+      "mp": { "start": 8, "projected": 16, "curve": "EARLY" },
+      "attack": { "start": 6, "projected": 40, "curve": "LINEAR" },
+      "defense": { "start": 4, "projected": 36, "curve": "LINEAR" },
+      "agility": { "start": 4, "projected": 32, "curve": "EARLY" },
+      "spells": [
+        { "level": 1, "spell": "EGRESS" },
+        { "level": 22, "spell": "BOLT", "spell_level": 1 },
+        { "level": 31, "spell": "BOLT", "spell_level": 2 },
+        { "level": 42, "spell": "BOLT", "spell_level": 3 },
+        { "level": 51, "spell": "BOLT", "spell_level": 4 }
+      ]
+    },
+    {
+      "id": 1,
+      "name": "SARAH",
+      "class": "PRST",
+      "promoted_class": "VICR",
+      "hp": { "start": 11, "projected": 41, "curve": "LINEAR" },
+      "mp": { "start": 10, "projected": 42, "curve": "EARLY" },
+      "attack": { "start": 6, "projected": 26, "curve": "LINEAR" },
+      "defense": { "start": 5, "projected": 25, "curve": "LINEAR" },
+      "agility": { "start": 5, "projected": 31, "curve": "LINEAR" },
+      "spells": [
+        { "level": 1, "spell": "HEAL", "spell_level": 1 },
+        { "level": 4, "spell": "DETOX", "spell_level": 1 },
+        { "level": 7, "spell": "HEAL", "spell_level": 2 },
+        { "level": 10, "spell": "BLAST", "spell_level": 1 },
+        { "level": 13, "spell": "DETOX", "spell_level": 2 },
+        { "level": 16, "spell": "BLAST", "spell_level": 2 },
+        { "level": 19, "spell": "SLOW", "spell_level": 1 },
+        { "level": 22, "spell": "HEAL", "spell_level": 3 },
+        { "level": 25, "spell": "BLAST", "spell_level": 3 },
+        { "level": 29, "spell": "SLOW", "spell_level": 2 },
+        { "level": 33, "spell": "DETOX", "spell_level": 3 },
+        { "level": 36, "spell": "BLAST", "spell_level": 4 },
+        { "level": 40, "spell": "HEAL", "spell_level": 4 },
+        { "level": 45, "spell": "DETOX", "spell_level": 4 }
+      ]
+    },
+    {
+      "id": 2,
+      "name": "CHESTER",
+      "class": "KNTE",
+      "promoted_class": "PLDN",
+      "alt_promoted_class": "PGNT",
+      "hp": { "start": 11, "projected": 59, "curve": "LATE" },
+      "mp": { "start": 0, "projected": 0, "curve": "NONE" },
+      "attack": { "start": 5, "projected": 35, "curve": "LINEAR" },
+      "defense": { "start": 5, "projected": 35, "curve": "EARLYANDLATE" },
+      "agility": { "start": 7, "projected": 35, "curve": "LINEAR" },
+      "spells": []
+    }
+  ]
+}

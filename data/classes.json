@@ -1,0 +1,127 @@
+{
+  "classes": [
+    {
+      "id": 0,
+      "name": "SDMN",
+      "full_name": "Swordsman",
+      "move": 6,
+      "move_type": "REGULAR",
+      "resistance": "NONE",
+      "critical_chance": 16,
+      "critical_power": 125,
+      "double_chance": 32,
+      "counter_chance": 32,
+      "description": "Мечник, базовый класс"
+    },
+    {
+      "id": 1,
+      "name": "KNTE",
+      "full_name": "Knight",
+      "move": 7,
+      "move_type": "CENTAUR",
+      "resistance": "NONE",
+      "critical_chance": 16,
+      "critical_power": 125,
+      "double_chance": 32,
+      "counter_chance": 32,
+      "description": "Рыцарь, высокое движение"
+    },
+    {
+      "id": 2,
+      "name": "WARR",
+      "full_name": "Warrior",
+      "move": 5,
+      "move_type": "REGULAR",
+      "resistance": "NONE",
+      "critical_chance": 16,
+      "critical_power": 125,
+      "double_chance": 32,
+      "counter_chance": 32,
+      "description": "Воин, низкое движение"
+    },
+    {
+      "id": 3,
+      "name": "MAGE",
+      "full_name": "Mage",
+      "move": 5,
+      "move_type": "MAGE",
+      "resistance": "NONE",
+      "critical_chance": 16,
+      "critical_power": 125,
+      "double_chance": 32,
+      "counter_chance": 32,
+      "description": "Маг"
+    },
+    {
+      "id": 4,
+      "name": "PRST",
+      "full_name": "Priest",
+      "move": 5,
+      "move_type": "HEALER",
+      "resistance": "NONE",
+      "critical_chance": 16,
+      "critical_power": 125,
+      "double_chance": 32,
+      "counter_chance": 32,
+      "description": "Жрец, лечит"
+    },
+    {
+      "id": 5,
+      "name": "ACHR",
+      "full_name": "Archer",
+      "move": 5,
+      "move_type": "ARCHER",
+      "resistance": "NONE",
+      "critical_chance": 16,
+      "critical_power": 125,
+      "double_chance": 32,
+      "counter_chance": 32,
+      "description": "Лучник"
+    },
+    {
+      "id": 6,
+      "name": "BDMN",
+      "full_name": "Birdman",
+      "move": 6,
+      "move_type": "FLYING",
+      "resistance": "NONE",
+      "critical_chance": 16,
+      "critical_power": 125,
+      "double_chance": 32,
+      "counter_chance": 32,
+      "description": "Птицечеловек, летает"
+    },
+    {
+      "id": 7,
+      "name": "WFMN",
+      "full_name": "Wolfman",
+      "move": 5,
+      "move_type": "STEALTH",
+      "resistance": "NONE",
+      "critical_chance": 16,
+      "critical_power": 125,
+      "double_chance": 32,
+      "counter_chance": 32,
+      "description": "Волколак"
+    },
+    {
+      "id": 10,
+      "name": "THIF",
+      "full_name": "Thief",
+      "move": 7,
+      "move_type": "REGULAR",
+      "resistance": "NONE",
+      "critical_chance": 16,
+      "critical_power": 125,
+      "double_chance": 16,
+      "counter_chance": 32,
+      "description": "Вор, высокий шанс двойного удара"
+    }
+  ]
+}
+{
+  "blacksmith_eligible_classes": [
+    "HERO", "PLDN", "PGNT", "GLDT", "BRN", "WIZ", "SORC", "VICR",
+    "MMNK", "SNIP", "BRGN", "BDBT", "BWNT", "NINJ", "RDBN"
+  ]
+}

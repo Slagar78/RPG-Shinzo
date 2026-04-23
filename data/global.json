@@ -1,0 +1,21 @@
+{
+  "critical_hits": [
+    { "chance_numerator": 1, "chance_denominator": 32, "damage_multiplier": 1.25 },
+    { "chance_numerator": 1, "chance_denominator": 16, "damage_multiplier": 1.25 },
+    { "chance_numerator": 1, "chance_denominator": 8,  "damage_multiplier": 1.25 },
+    { "chance_numerator": 1, "chance_denominator": 4,  "damage_multiplier": 1.25 },
+    { "chance_numerator": 1, "chance_denominator": 32, "damage_multiplier": 1.50 },
+    { "chance_numerator": 1, "chance_denominator": 16, "damage_multiplier": 1.50 },
+    { "chance_numerator": 1, "chance_denominator": 8,  "damage_multiplier": 1.50 },
+    { "chance_numerator": 1, "chance_denominator": 4,  "damage_multiplier": 1.50 }
+  ],
+  "weapon_effects": [
+    { "effect": "poison", "chance_numerator": 1, "chance_denominator": 4 },
+    { "effect": "sleep", "chance_numerator": 1, "chance_denominator": 4 },
+    { "effect": "stun", "chance_numerator": 1, "chance_denominator": 4 },
+    { "effect": "muddle", "chance_numerator": 1, "chance_denominator": 4 },
+    { "effect": "slow", "chance_numerator": 1, "chance_denominator": 4 },
+    { "effect": "drain_mp", "chance_numerator": 1, "chance_denominator": 4 },
+    { "effect": "silence", "chance_numerator": 1, "chance_denominator": 4 }
+  ]
+}
