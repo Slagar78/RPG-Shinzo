@@ -27,6 +27,7 @@ class StatusOverlay
     @portrait_y = 16
     
     @current_actor = nil
+    @current_actor_data = nil
     @portrait_tex = nil
     @blink_tex = nil
     @blink_timer = 0
@@ -36,6 +37,7 @@ class StatusOverlay
     @view_mode = 0
     @party = []
     @selected_index = 0
+    @selection_blink_timer = 0
     
     load_textures
     load_actors
@@ -94,7 +96,8 @@ class StatusOverlay
     @selected_index = 0
     
     if @party.any?
-      @current_actor = @party[0]["name"]
+      @current_actor_data = @party[0]
+      @current_actor = @current_actor_data["name"]
       @portrait_tex = load_portrait(@current_actor)
       @blink_tex = load_blink_portrait(@current_actor)
     end
@@ -129,7 +132,8 @@ class StatusOverlay
   
   def update_current_actor
     if @party.any? && @selected_index < @party.size
-      @current_actor = @party[@selected_index]["name"]
+      @current_actor_data = @party[@selected_index]
+      @current_actor = @current_actor_data["name"]
       @portrait_tex = load_portrait(@current_actor)
       @blink_tex = load_blink_portrait(@current_actor)
     end
@@ -169,42 +173,47 @@ class StatusOverlay
       @blink_timer = 0
       @blink_interval = 100 + rand(50)
     end
+    
+    if @anim_phase == 2
+      @selection_blink_timer += 1
+    end
   end
   
-  def draw
-    return unless @visible
-    
-    # Верхняя панель
-    dst = Rectangle.create
-    dst.x = @upper_x
-    dst.y = @upper_y
-    dst.width = @upper_width
-    dst.height = @upper_height
-    DrawTexturePro(@upper_panel, Rectangle.create(0, 0, @upper_width, @upper_height), dst, Vector2.create(0, 0), 0, WHITE)
-    
-    # Нижняя панель
-    dst.x = @lower_x
-    dst.y = @lower_y
-    dst.width = @lower_width
-    dst.height = @lower_height
-    DrawTexturePro(@lower_panel, Rectangle.create(0, 0, @lower_width, @lower_height), dst, Vector2.create(0, 0), 0, WHITE)
-    
-    # Портрет (сначала)
-    if @portrait_tex
-      dst.x = @portrait_x + 2
-      dst.y = @portrait_y + 2
-      dst.width = @portrait_width - 4
-      dst.height = @portrait_height - 4
-      
-      texture = (@blink_duration > 0 && @blink_tex) ? @blink_tex : @portrait_tex
-      DrawTexturePro(texture, Rectangle.create(0, 0, @portrait_width, @portrait_height), dst, Vector2.create(0, 0), 0, WHITE)
-    end
-    
-    # Рамка ПОСЛЕ портрета (поверх)
-    dst.x = @portrait_x
-    dst.y = @portrait_y
-    dst.width = @portrait_width
-    dst.height = @portrait_height
-    DrawTexturePro(@portrait_frame, Rectangle.create(0, 0, @portrait_width, @portrait_height), dst, Vector2.create(0, 0), 0, WHITE)
+def draw
+  return unless @visible
+  
+  # Панели
+  dst = Rectangle.create
+  dst.x = @upper_x
+  dst.y = @upper_y
+  dst.width = @upper_width
+  dst.height = @upper_height
+  DrawTexturePro(@upper_panel, Rectangle.create(0, 0, @upper_width, @upper_height), dst, Vector2.create(0, 0), 0, WHITE)
+  
+  dst.x = @lower_x
+  dst.y = @lower_y
+  dst.width = @lower_width
+  dst.height = @lower_height
+  DrawTexturePro(@lower_panel, Rectangle.create(0, 0, @lower_width, @lower_height), dst, Vector2.create(0, 0), 0, WHITE)
+  
+  # Портрет
+  if @portrait_tex
+    dst.x = @portrait_x + 2
+    dst.y = @portrait_y + 2
+    dst.width = @portrait_width - 4
+    dst.height = @portrait_height - 4
+    texture = (@blink_duration > 0 && @blink_tex) ? @blink_tex : @portrait_tex
+    DrawTexturePro(texture, Rectangle.create(0, 0, @portrait_width, @portrait_height), dst, Vector2.create(0, 0), 0, WHITE)
   end
+  
+  # Рамка поверх портрета
+  dst.x = @portrait_x
+  dst.y = @portrait_y
+  dst.width = @portrait_width
+  dst.height = @portrait_height
+  DrawTexturePro(@portrait_frame, Rectangle.create(0, 0, @portrait_width, @portrait_height), dst, Vector2.create(0, 0), 0, WHITE)
+  
+  # ВРЕМЕННО: ТЕКСТ ОТКЛЮЧЁН
+  # DrawText("TEST", 10, 10, 20, WHITE)
+end
 end
