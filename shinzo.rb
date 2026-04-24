@@ -12,11 +12,9 @@ include Raylib
 
 class Shinzo
   def initialize
-    # СНАЧАЛО инициализируем окно
     InitWindow(576, 480, "RPG Shinzo")
     SetTargetFPS(60)
     
-    # ПОТОМ загружаем всё остальное
     @db = Database.new
     @player = Player.new
     @menu = BottomMenu.new
@@ -53,9 +51,13 @@ class Shinzo
         @menu.handle_input
       end
     when :status
-      if IsKeyPressed(KEY_S) || IsKeyPressed(KEY_A) || IsKeyPressed(KEY_D)
-        @game_state = :menu
-        @status_overlay.close
+      # S — мгновенное закрытие (возврат в игру)
+      if IsKeyPressed(KEY_S)
+        @game_state = :playing
+        @status_overlay.force_close
+      # A/D — передаём в обработчик статуса (закрытие с анимацией, остаёмся в статусе)
+      elsif IsKeyPressed(KEY_A) || IsKeyPressed(KEY_D)
+        @status_overlay.handle_input
       else
         @status_overlay.handle_input
       end
