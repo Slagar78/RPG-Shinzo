@@ -1,4 +1,4 @@
-# shinzo.rb
+# Game.rb
 require 'raylib'
 require_relative 'lib/database'
 require_relative 'lib/player'
@@ -8,7 +8,7 @@ shared_lib_path = Gem::Specification.find_by_name('raylib-bindings').full_gem_pa
 Raylib.load_lib(shared_lib_path + 'libraylib.dll')
 include Raylib
 
-class Shinzo
+class Game
   def initialize
     InitWindow(576, 480, "RPG Shinzo")
     SetTargetFPS(60)
@@ -61,14 +61,8 @@ class Shinzo
   end
   
   def update
-    # АНИМАЦИЯ ИГРОКА ВСЕГДА
     @player.update_animation
-    
-    # Движение только в игре
-    if @game_state == :playing
-      @player.update_movement
-    end
-    
+    @player.update_movement if @game_state == :playing
     @menu.update if @game_state == :menu
     @status_overlay.update if @game_state == :status
   end
@@ -76,7 +70,6 @@ class Shinzo
   def draw
     BeginDrawing()
     ClearBackground(RAYWHITE)
-    
     draw_grid
     @player.draw
     
@@ -100,3 +93,5 @@ class Shinzo
     end
   end
 end
+
+Game.new.run if __FILE__ == $0

@@ -1,0 +1,33 @@
+RPG-Shinzo/
+│
+├── main.rb                 # ГЛАВНЫЙ ФАЙЛ (запуск движка игры)
+├── editor.rb              # РЕДАКТОР (конструктор)
+│
+├── lib/
+│   ├── database.rb        # Загрузка JSON
+│   ├── player.rb          # Класс персонажа
+│   ├── ui.rb              # Меню, статус-окно
+│   └── map.rb             # Загрузка/сохранение карт
+│
+├── data/
+│   ├── actors.json
+│   ├── classes.json
+│   ├── items.json
+│   ├── spells.json
+│   └── map.json           # Сохраняется из редактора
+│
+├── assets/
+│   ├── mapsprites/        # Спрайты персонажей (hero.png)
+│   ├── ui/
+│   │   ├── menu/          # Плитки Menu1.png и т.д.
+│   │   ├── portraits/     # Портреты (actor00.png и т.д.)
+│   │   ├── fonts/         # Шрифты
+│   │   ├── upper_panel.png
+│   │   ├── lower_panel.png
+│   │   └── portrait_frame.png
+│   └── icons/             # Иконки для редактора
+│       ├── map.png
+│       ├── database.png
+│       └── playtest.png
+│
+└── README.md
