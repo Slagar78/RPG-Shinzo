@@ -104,11 +104,29 @@ end
 # ОВЕРЛЕЙ СТАТУСА (Status Overlay)
 # ============================================
 class StatusOverlay
+
+  def get_actor_stats(actor_name)
+    @party.each do |actor|
+      if actor["name"] == actor_name
+        return actor
+      end
+    end
+    nil
+  end
+
   def initialize
     @visible = false
     @anim_phase = 0
     @anim_timer = 0
     @ready_to_close = false
+	
+	 # Загружаем заклинания
+  if File.exist?("data/spells.json")
+    data = JSON.parse(File.read("data/spells.json"))
+    @all_spells = data["spells"] || []
+  else
+    @all_spells = []
+  end
     
     # Целевые позиции
     @upper_target_x = 182
@@ -291,28 +309,63 @@ class StatusOverlay
     end
   end
   
-  def draw
-    return unless @visible
+def draw
+  return unless @visible
+  
+  origin = Raylib::Vector2.create(0, 0)
+  
+  # Нижняя панель
+  dst = Raylib::Rectangle.create(@lower_x, @lower_y, @lower_w, @lower_h)
+  src = Raylib::Rectangle.create(0, 0, @lower_w, @lower_h)
+  Raylib.DrawTexturePro(@lower_tex, src, dst, origin, 0, Raylib::WHITE)
+  
+  # Верхняя панель
+  dst = Raylib::Rectangle.create(@upper_x, @upper_y, @upper_w, @upper_h)
+  src = Raylib::Rectangle.create(0, 0, @upper_w, @upper_h)
+  Raylib.DrawTexturePro(@upper_tex, src, dst, origin, 0, Raylib::WHITE)
+  
+  # Портрет
+  if @portrait_tex
+    portrait = (@blink_duration > 0 && @blink_tex) ? @blink_tex : @portrait_tex
+    dst = Raylib::Rectangle.create(@portrait_x + 2, @portrait_y + 2, @portrait_w - 4, @portrait_h - 4)
+    src = Raylib::Rectangle.create(0, 0, @portrait_w, @portrait_h)
+    Raylib.DrawTexturePro(portrait, src, dst, origin, 0, Raylib::WHITE)
+  end
+  
+  # Рамка
+  dst = Raylib::Rectangle.create(@frame_x, @frame_y, @frame_w, @frame_h)
+  src = Raylib::Rectangle.create(0, 0, @frame_w, @frame_h)
+  Raylib.DrawTexturePro(@frame_tex, src, dst, origin, 0, Raylib::WHITE)
+  
+  # ===== ТЕКСТ =====
+  # Имя, класс, уровень
+  DrawText("MUSHRA  MAGE  LV 18", @upper_x + 25, @upper_y + 12, 20, WHITE)
+  DrawText("Магия", @upper_x + 25, @upper_y + 42, 24, WHITE)
+  DrawText("Предметы", @upper_x + 195, @upper_y + 38, 24, WHITE)
+  
+  # Заклинания Mage на 18 уровне
+  DrawText("BLAZE Lv2", @upper_x + 25, @upper_y + 72, 20, WHITE)
+  DrawText("MUDDLE Lv1", @upper_x + 25, @upper_y + 106, 20, WHITE)
+  DrawText("DISPEL Lv1", @upper_x + 25, @upper_y + 140, 20, WHITE)
+  DrawText("DESOUL Lv1", @upper_x + 25, @upper_y + 174, 20, WHITE)
+  
+  # Предметы (заглушка)
+  DrawText("Medical Herb", @upper_x + 195, @upper_y + 64, 18, WHITE)
+  DrawText("Healing Seed", @upper_x + 195, @upper_y + 97, 18, WHITE)
+  
+  # Нижняя панель — список партии
+  @party.each_with_index do |member, i|
+    y = @lower_y + 71 + i * 34
     
-    origin = Raylib::Vector2.create(0, 0)
-    
-    dst = Raylib::Rectangle.create(@lower_x, @lower_y, @lower_w, @lower_h)
-    src = Raylib::Rectangle.create(0, 0, @lower_w, @lower_h)
-    Raylib.DrawTexturePro(@lower_tex, src, dst, origin, 0, Raylib::WHITE)
-    
-    dst = Raylib::Rectangle.create(@upper_x, @upper_y, @upper_w, @upper_h)
-    src = Raylib::Rectangle.create(0, 0, @upper_w, @upper_h)
-    Raylib.DrawTexturePro(@upper_tex, src, dst, origin, 0, Raylib::WHITE)
-    
-    if @portrait_tex
-      portrait = (@blink_duration > 0 && @blink_tex) ? @blink_tex : @portrait_tex
-      dst = Raylib::Rectangle.create(@portrait_x + 2, @portrait_y + 2, @portrait_w - 4, @portrait_h - 4)
-      src = Raylib::Rectangle.create(0, 0, @portrait_w, @portrait_h)
-      Raylib.DrawTexturePro(portrait, src, dst, origin, 0, Raylib::WHITE)
+    if member["name"] == @current_actor
+      DrawRectangle(@lower_x + 38, y - 4, 138, 28, WHITE)
     end
     
-    dst = Raylib::Rectangle.create(@frame_x, @frame_y, @frame_w, @frame_h)
-    src = Raylib::Rectangle.create(0, 0, @frame_w, @frame_h)
-    Raylib.DrawTexturePro(@frame_tex, src, dst, origin, 0, Raylib::WHITE)
+    DrawText(member["name"], @lower_x + 44, y, 18, WHITE)
+    DrawText(member["class"], @lower_x + 187, y, 18, WHITE)
+    DrawText(member["level"].to_s, @lower_x + 290, y, 18, WHITE)
+    DrawText(member["exp"].to_s, @lower_x + 395, y, 18, WHITE)
   end
+end
+
 end
