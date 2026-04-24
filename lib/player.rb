@@ -18,6 +18,7 @@ class Player
   attr_accessor :x, :y, :direction, :pattern
   attr_accessor :moving, :move_dir, :move_offset
   attr_accessor :anim_frame
+  attr_accessor :can_move  # флаг для разрешения движения
   
   def initialize
     @x = 6
@@ -28,6 +29,7 @@ class Player
     @move_dir = DIR_DOWN
     @move_offset = 0.0
     @anim_frame = 0
+    @can_move = true  # по умолчанию можно двигаться
     load_textures
   end
   
@@ -47,7 +49,8 @@ class Player
   end
   
   def handle_input
-    if !@moving
+    # Движение только если можно двигаться и не двигаемся сейчас
+    if @can_move && !@moving
       if IsKeyDown(KEY_RIGHT)
         start_move(DIR_RIGHT)
       elsif IsKeyDown(KEY_LEFT)
@@ -82,13 +85,15 @@ class Player
     @move_offset = 0.0
   end
   
-  def update
+  def update_animation
     @anim_frame += 1
     if @anim_frame >= ANIM_SPEED
       @anim_frame = 0
       @pattern = (@pattern + 1) % 2
     end
-    
+  end
+  
+  def update_movement
     if @moving
       @move_offset += MOVE_SPEED
       if @move_offset >= 1.0
@@ -102,6 +107,11 @@ class Player
         @move_offset = 0.0
       end
     end
+  end
+  
+  def update
+    update_animation  # анимация ВСЕГДА
+    update_movement   # движение только если @moving активно
   end
   
   def draw

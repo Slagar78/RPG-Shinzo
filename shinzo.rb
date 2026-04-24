@@ -2,10 +2,8 @@
 require 'raylib'
 require_relative 'lib/database'
 require_relative 'lib/player'
-require_relative 'lib/menu'
-require_relative 'lib/status_overlay'
+require_relative 'lib/ui'
 
-# Подключаем Raylib глобально
 shared_lib_path = Gem::Specification.find_by_name('raylib-bindings').full_gem_path + '/lib/'
 Raylib.load_lib(shared_lib_path + 'libraylib.dll')
 include Raylib
@@ -51,11 +49,9 @@ class Shinzo
         @menu.handle_input
       end
     when :status
-      # S — мгновенное закрытие (возврат в игру)
       if IsKeyPressed(KEY_S)
         @game_state = :playing
         @status_overlay.force_close
-      # A/D — передаём в обработчик статуса (закрытие с анимацией, остаёмся в статусе)
       elsif IsKeyPressed(KEY_A) || IsKeyPressed(KEY_D)
         @status_overlay.handle_input
       else
@@ -65,7 +61,14 @@ class Shinzo
   end
   
   def update
-    @player.update if @game_state == :playing
+    # АНИМАЦИЯ ИГРОКА ВСЕГДА
+    @player.update_animation
+    
+    # Движение только в игре
+    if @game_state == :playing
+      @player.update_movement
+    end
+    
     @menu.update if @game_state == :menu
     @status_overlay.update if @game_state == :status
   end

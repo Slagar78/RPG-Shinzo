@@ -1,10 +1,112 @@
-# lib/status_overlay.rb
+# lib/ui.rb
 require 'json'
 
+# ============================================
+# МЕНЮ 4 ПЛИТКИ (Bottom Menu)
+# ============================================
+class BottomMenu
+  def initialize
+    load_tiles
+    @visible = false
+    @selected_index = 0
+    @anim_timer = 0
+    @tile_size = 48
+    @offset = 48
+    load_textures
+  end
+  
+  def load_tiles
+    if File.exist?("data/menu.json")
+      data = JSON.parse(File.read("data/menu.json"))
+      @tiles = data["tiles"]
+    else
+      @tiles = [
+        { "id" => 0, "name" => "status", "icon" => "assets/ui/menu/status.png", "icon_anim" => "assets/ui/menu/status_anim.png" },
+        { "id" => 1, "name" => "magic", "icon" => "assets/ui/menu/magic.png", "icon_anim" => "assets/ui/menu/magic_anim.png" },
+        { "id" => 2, "name" => "items", "icon" => "assets/ui/menu/items.png", "icon_anim" => "assets/ui/menu/items_anim.png" },
+        { "id" => 3, "name" => "event", "icon" => "assets/ui/menu/event.png", "icon_anim" => "assets/ui/menu/event_anim.png" }
+      ]
+    end
+  end
+  
+  def load_textures
+    @textures = []
+    @tiles.each do |tile|
+      normal = Raylib.LoadTexture(tile["icon"])
+      anim = Raylib.LoadTexture(tile["icon_anim"])
+      Raylib.SetTextureFilter(normal, 0)
+      Raylib.SetTextureFilter(anim, 0)
+      @textures << { normal: normal, anim: anim }
+    end
+  end
+  
+  def open
+    @visible = true
+    @selected_index = 0
+    @anim_timer = 0
+  end
+  
+  def close
+    @visible = false
+  end
+  
+  def handle_input
+    return unless @visible
+    
+    if Raylib.IsKeyPressed(Raylib::KEY_UP)
+      @selected_index = 0
+    elsif Raylib.IsKeyPressed(Raylib::KEY_LEFT)
+      @selected_index = 1
+    elsif Raylib.IsKeyPressed(Raylib::KEY_RIGHT)
+      @selected_index = 2
+    elsif Raylib.IsKeyPressed(Raylib::KEY_DOWN)
+      @selected_index = 3
+    end
+  end
+  
+  def update
+    return unless @visible
+    @anim_timer += 1
+  end
+  
+  def draw
+    return unless @visible
+    
+    center_x = 576 / 2
+    center_y = 480 - 80
+    
+    positions = [
+      { x: center_x,           y: center_y - @offset + 24 },
+      { x: center_x - @offset, y: center_y },
+      { x: center_x + @offset, y: center_y },
+      { x: center_x,           y: center_y + @offset - 24 }
+    ]
+    
+    (0..3).each do |i|
+      tex = @textures[i]
+      pos = positions[i]
+      
+      if i == @selected_index
+        use_anim = (@anim_timer % 24) < 12
+        texture = use_anim ? tex[:anim] : tex[:normal]
+      else
+        texture = tex[:normal]
+      end
+      
+      dst = Raylib::Rectangle.create(pos[:x] - @tile_size/2, pos[:y] - @tile_size/2, @tile_size, @tile_size)
+      src = Raylib::Rectangle.create(0, 0, @tile_size, @tile_size)
+      Raylib.DrawTexturePro(texture, src, dst, Raylib::Vector2.create(0, 0), 0, Raylib::WHITE)
+    end
+  end
+end
+
+# ============================================
+# ОВЕРЛЕЙ СТАТУСА (Status Overlay)
+# ============================================
 class StatusOverlay
   def initialize
     @visible = false
-    @anim_phase = 0  # 0=закрыт,1=открытие,2=открыт,3=закрытие
+    @anim_phase = 0
     @anim_timer = 0
     @ready_to_close = false
     
@@ -18,7 +120,7 @@ class StatusOverlay
     @frame_target_x = 48
     @frame_target_y = 16
     
-    # Стартовые позиции (за экраном)
+    # Стартовые позиции
     @upper_start_x = 576 + 220
     @lower_start_y = 480 + 220
     @portrait_start_x = -220
@@ -111,7 +213,6 @@ class StatusOverlay
       @blink_tex = load_blink_portrait(@current_actor)
     end
     
-    # Сброс моргания
     @blink_timer = 0
     @blink_duration = 0
     @blink_interval = 120
@@ -138,11 +239,10 @@ class StatusOverlay
   def update
     return unless @visible
     
-    # ===== АНИМАЦИЯ СБОРКИ/РАЗБОРКИ =====
     speed = 38
     
     case @anim_phase
-    when 1  # открытие
+    when 1
       @portrait_x += speed
       @portrait_x = @portrait_target_x if @portrait_x > @portrait_target_x
       @frame_x += speed
@@ -161,7 +261,7 @@ class StatusOverlay
         @anim_phase = 2
       end
       
-    when 3  # закрытие (разборка)
+    when 3
       @portrait_x -= speed
       @portrait_x = @portrait_start_x if @portrait_x < @portrait_start_x
       @frame_x -= speed
@@ -179,7 +279,6 @@ class StatusOverlay
       end
     end
     
-    # ===== МОРГАНИЕ ПОРТРЕТА =====
     if @anim_phase == 2
       @blink_timer += 1
       if @blink_duration > 0
@@ -197,31 +296,21 @@ class StatusOverlay
     
     origin = Raylib::Vector2.create(0, 0)
     
-    # 1. Нижняя панель
     dst = Raylib::Rectangle.create(@lower_x, @lower_y, @lower_w, @lower_h)
     src = Raylib::Rectangle.create(0, 0, @lower_w, @lower_h)
     Raylib.DrawTexturePro(@lower_tex, src, dst, origin, 0, Raylib::WHITE)
     
-    # 2. Верхняя панель
     dst = Raylib::Rectangle.create(@upper_x, @upper_y, @upper_w, @upper_h)
     src = Raylib::Rectangle.create(0, 0, @upper_w, @upper_h)
     Raylib.DrawTexturePro(@upper_tex, src, dst, origin, 0, Raylib::WHITE)
     
-    # 3. Портрет (с морганием)
     if @portrait_tex
-      # Выбираем текстуру: мигающую или обычную
-      if @blink_duration > 0 && @blink_tex
-        portrait = @blink_tex
-      else
-        portrait = @portrait_tex
-      end
-      
+      portrait = (@blink_duration > 0 && @blink_tex) ? @blink_tex : @portrait_tex
       dst = Raylib::Rectangle.create(@portrait_x + 2, @portrait_y + 2, @portrait_w - 4, @portrait_h - 4)
       src = Raylib::Rectangle.create(0, 0, @portrait_w, @portrait_h)
       Raylib.DrawTexturePro(portrait, src, dst, origin, 0, Raylib::WHITE)
     end
     
-    # 4. Рамка (поверх портрета)
     dst = Raylib::Rectangle.create(@frame_x, @frame_y, @frame_w, @frame_h)
     src = Raylib::Rectangle.create(0, 0, @frame_w, @frame_h)
     Raylib.DrawTexturePro(@frame_tex, src, dst, origin, 0, Raylib::WHITE)
