@@ -1,7 +1,6 @@
 # lib/player.rb
 require 'raylib'
 
-# Константы
 TILE_SIZE = 48
 DEFAULT_GRID_W = 12
 DEFAULT_GRID_H = 10
@@ -37,6 +36,8 @@ class Player
     @move_offset = 0.0
     @anim_frame = 0
     @can_move = true
+    @current_speed = MOVE_SPEED
+    @just_turned = false   # Флаг: только что повернулся – не начинать движение в этом кадре
     load_textures
   end
 
@@ -56,25 +57,36 @@ class Player
   end
 
   def handle_input
-    if @can_move && !@moving
-      if IsKeyDown(KEY_RIGHT)
-        start_move(DIR_RIGHT)
-      elsif IsKeyDown(KEY_LEFT)
-        start_move(DIR_LEFT)
-      elsif IsKeyDown(KEY_DOWN)
-        start_move(DIR_DOWN)
-      elsif IsKeyDown(KEY_UP)
-        start_move(DIR_UP)
-      end
+    return unless @can_move && !@moving
+
+    # Сброс флага "только что повернулся" в начале каждого кадра
+    @just_turned = false
+
+    if IsKeyDown(KEY_RIGHT)
+      try_move_or_turn(DIR_RIGHT)
+    elsif IsKeyDown(KEY_LEFT)
+      try_move_or_turn(DIR_LEFT)
+    elsif IsKeyDown(KEY_DOWN)
+      try_move_or_turn(DIR_DOWN)
+    elsif IsKeyDown(KEY_UP)
+      try_move_or_turn(DIR_UP)
     end
   end
 
-  def start_move(dir)
-    return if @moving
+  def try_move_or_turn(dir)
+    # Если направление не совпадает – только поворачиваемся и ставим флаг
+    if @direction != dir
+      @direction = dir
+      @just_turned = true
+      return
+    end
 
+    # Если только что повернулись – в этом кадре не начинать движение
+    return if @just_turned
+
+    # Направление совпадает и нет блокировки – начинаем движение
     new_x = @x
     new_y = @y
-
     case dir
     when DIR_RIGHT then new_x += 1
     when DIR_LEFT  then new_x -= 1
@@ -83,17 +95,19 @@ class Player
     end
 
     if @map
-      # границы карты
       return if new_x < 0 || new_x >= @map.width
       return if new_y < 0 || new_y >= @map.height
       return unless @map.passable?(new_x, new_y)
+
+      tile_type = @map.tile_type_at(new_x, new_y)
+      @current_speed = (tile_type == 2) ? MOVE_SPEED * 0.5 : MOVE_SPEED
     else
       return if new_x < 0 || new_x >= DEFAULT_GRID_W
       return if new_y < 0 || new_y >= DEFAULT_GRID_H
+      @current_speed = MOVE_SPEED
     end
 
     @move_dir = dir
-    @direction = dir
     @moving = true
     @move_offset = 0.0
   end
@@ -108,7 +122,7 @@ class Player
 
   def update_movement
     if @moving
-      @move_offset += MOVE_SPEED
+      @move_offset += @current_speed
       if @move_offset >= 1.0
         case @move_dir
         when DIR_RIGHT then @x += 1
@@ -142,13 +156,12 @@ class Player
 
     texture = (@direction == DIR_RIGHT) ? @tex_right : @tex_left
 
-    case @direction
-    when DIR_UP    then row = 0
-    when DIR_LEFT  then row = 1
-    when DIR_RIGHT then row = 1
-    when DIR_DOWN  then row = 2
-    else row = 2
-    end
+    row = case @direction
+          when DIR_UP    then 0
+          when DIR_LEFT  then 1
+          when DIR_RIGHT then 1
+          else 2
+          end
 
     src = Rectangle.create
     src.x = @pattern * TILE_SIZE

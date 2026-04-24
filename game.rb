@@ -66,11 +66,35 @@ class GameMap
     end
   end
 
+  def draw_under_tiles
+    return unless @tileset_texture
+    (0...@width).each do |x|
+      (0...@height).each do |y|
+        tile_id = @tiles[x][y]
+        next if tile_id.nil? || tile_id < 0
+        type = @tile_types[tile_id] || 0
+        next unless type == 3
+
+        src_x = (tile_id % @cols) * @tile_size
+        src_y = (tile_id / @cols) * @tile_size
+        src = Rectangle.create(src_x, src_y, @tile_size, @tile_size)
+        dst = Rectangle.create(x * @tile_size, y * @tile_size, @tile_size, @tile_size)
+        DrawTexturePro(@tileset_texture, src, dst, Vector2.create(0, 0), 0, WHITE)
+      end
+    end
+  end
+
   def passable?(x, y)
     return false if x < 0 || x >= @width || y < 0 || y >= @height
     tile_id = @tiles[x][y]
     type = @tile_types[tile_id] || 0
     type != 1
+  end
+
+  def tile_type_at(x, y)
+    return 1 if x < 0 || x >= @width || y < 0 || y >= @height
+    tile_id = @tiles[x][y]
+    @tile_types[tile_id] || 0
   end
 end
 
@@ -83,7 +107,7 @@ class Game
   def initialize
     InitWindow(576, 480, "RPG Shinzo")
     SetTargetFPS(60)
-    
+
     @db = Database.new
     @game_map = GameMap.new
     @player = Player.new(@game_map)
@@ -91,14 +115,13 @@ class Game
     @status_overlay = StatusOverlay.new
     @game_state = :playing
 
-    # Создаём камеру
     @camera = Camera2D.new
     @camera.zoom = 1.0
-    @camera.offset = Vector2.create(288, 240)  # центр экрана 576/2, 480/2
+    @camera.offset = Vector2.create(288, 240)
     @camera.target = Vector2.create(@player.x * @game_map.tile_size + 24,
                                     @player.y * @game_map.tile_size + 24)
   end
-  
+
   def run
     until WindowShouldClose()
       handle_input
@@ -107,7 +130,7 @@ class Game
     end
     CloseWindow()
   end
-  
+
   def handle_input
     case @game_state
     when :playing
@@ -138,19 +161,17 @@ class Game
       end
     end
   end
-  
+
   def update
     @player.update_animation
     @player.update_movement if @game_state == :playing
     @menu.update if @game_state == :menu
     @status_overlay.update if @game_state == :status
 
-    # Обновление камеры
     if @game_state == :playing
       target_x = @player.x * @game_map.tile_size + @game_map.tile_size / 2
       target_y = @player.y * @game_map.tile_size + @game_map.tile_size / 2
 
-      # Ограничения камеры границами карты
       half_w = 288
       half_h = 240
       max_x = @game_map.width * @game_map.tile_size - half_w
@@ -161,33 +182,30 @@ class Game
 
       cam_x = @camera.target.x
       cam_y = @camera.target.y
-
       smooth = 0.09
-
       cam_x = lerp(cam_x, target_x, smooth)
       cam_y = lerp(cam_y, target_y, smooth)
-
       @camera.target = Vector2.create(cam_x, cam_y)
     end
   end
-  
+
   def draw
     BeginDrawing()
     ClearBackground(RAYWHITE)
-    
+
     BeginMode2D(@camera)
     @game_map.draw
     @player.draw
+    @game_map.draw_under_tiles
     EndMode2D()
-    
-    # UI без камеры
+
     case @game_state
     when :menu
       @menu.draw
     when :status
       @status_overlay.draw
     end
-    
+
     DrawText("FPS: #{GetFPS()}", 576 - 100, 10, 20, DARKGRAY)
     EndDrawing()
   end
