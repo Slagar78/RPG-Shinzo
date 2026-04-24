@@ -74,6 +74,10 @@ class GameMap
   end
 end
 
+def lerp(a, b, t)
+  a + (b - a) * t
+end
+
 # ========== ОСНОВНАЯ ИГРА ==========
 class Game
   def initialize
@@ -155,7 +159,15 @@ class Game
       target_x = clamp(target_x, half_w, max_x) if max_x > half_w
       target_y = clamp(target_y, half_h, max_y) if max_y > half_h
 
-      @camera.target = Vector2.create(target_x, target_y)
+      cam_x = @camera.target.x
+      cam_y = @camera.target.y
+
+      smooth = 0.09
+
+      cam_x = lerp(cam_x, target_x, smooth)
+      cam_y = lerp(cam_y, target_y, smooth)
+
+      @camera.target = Vector2.create(cam_x, cam_y)
     end
   end
   
