@@ -1,266 +1,464 @@
+# map_editor.rb
 require 'gosu'
 require 'json'
 
 class MapEditor < Gosu::Window
-  MAP_W = 12
-  MAP_H = 12
+  # Константы
   TILE_SIZE = 48
   TILESET_COLS = 12
   PALETTE_WIDTH = TILESET_COLS * TILE_SIZE + 20
+  MAP_AREA_X = PALETTE_WIDTH + 10
+  DEFAULT_WIDTH = 20
+  DEFAULT_HEIGHT = 15
 
-  MODE_ROTATE = 0
-  MODE_MIRROR_H = 1
-  MODE_MIRROR_V = 2
+  BTN_A_X      = 10
+  BTN_A_Y      = 10
+  BTN_A_W      = 60
+  BTN_A_H      = 30
+  BTN_C_X      = 80
+  BTN_C_Y      = 10
+  BTN_C_W      = 60
+  BTN_C_H      = 30
+  BTN_SAVE_W   = 70
+  BTN_SAVE_H   = 30
+
+  TRANS_X_OFFSET = 200
+  TRANS_W     = 40
+  TRANS_H     = 30
+  TRANS_LABELS = ["Rot", "MirH", "MirV"]
+  TRANS_MODES  = [:rotate, :mirror_h, :mirror_v]
+
+  TYPE_ICON_SIZE = 32
+  TYPE_ICONS_Y   = 60
+  TYPE_ICONS_START_X = 10
+  TYPE_ICONS_GAP = 40
+
+  MAP_LIST_START_X = 10
+  MAP_LIST_START_Y = 10
+  MAP_LIST_ITEM_H = 25
+  MAP_BUTTONS_Y_OFFSET = 35
+  MAP_BUTTON_H = 25
+  MAP_BUTTON_W = 70
+  MAP_BUTTONS = ["Prev", "Next", "New", "Del"]
+
+  PALETTE_START_X = 10
+  PALETTE_START_Y = 220
+  PALETTE_ROW_H = TILE_SIZE
 
   def initialize
-    super(PALETTE_WIDTH + MAP_W * TILE_SIZE + 20, MAP_H * TILE_SIZE + 150)
-    self.caption = "Map Editor - Right click: rotate/mirror (buttons on top right)"
+    super(MAP_AREA_X + DEFAULT_WIDTH * TILE_SIZE + 50, 800)
+    self.caption = "Map Editor"
 
     @font = Gosu::Font.new(16)
-    @small_font = Gosu::Font.new(14)
 
-    # Данные карты
-    @map = Array.new(MAP_W) { Array.new(MAP_H, 0) }
-    @map_rot = Array.new(MAP_W) { Array.new(MAP_H, 0) }
-    @map_mirror_x = Array.new(MAP_W) { Array.new(MAP_H, false) }
-    @map_mirror_y = Array.new(MAP_W) { Array.new(MAP_H, false) }
-    load_map
+    @maps = []
+    @current_index = 0
+    @camera = { x: 0, y: 0, zoom: 1.0 }
+    @palette_scroll = 0
+    @selected_tile = 0
+    @mode = :draw
+    @current_type = 0
+    @right_click_mode = :rotate
+    @drag_x = nil
+    @drag_y = nil
 
-    # Тайлсет
-    if File.exist?("assets/tilesets/tileset.png")
-      @tiles = Gosu::Image.load_tiles("assets/tilesets/tileset.png", TILE_SIZE, TILE_SIZE)
-      puts "Loaded #{@tiles.size} tiles"
+    @tileset_path = "assets/tilesets/tileset.png"
+    @tiles = []
+    @tile_types = []
+    @type_icons = []
+
+    load_maps
+    load_tileset
+    load_tile_types
+    load_type_icons
+  end
+
+  # ========== ЗАГРУЗКА / СОХРАНЕНИЕ КАРТ ==========
+  def load_maps
+    Dir.mkdir("data/maps") unless Dir.exist?("data/maps")
+    @maps = Dir["data/maps/*.json"].map { |p| JSON.parse(File.read(p)) rescue nil }.compact
+    create_map("map00", DEFAULT_WIDTH, DEFAULT_HEIGHT) if @maps.empty?
+  end
+
+  def save_current
+    File.write("data/maps/#{current_map['name']}.json", JSON.pretty_generate(current_map))
+    puts "Saved #{current_map['name']}"
+  end
+
+  def create_map(name, w, h)
+    base = name
+    counter = 0
+    while @maps.any? { |m| m['name'] == name }
+      counter += 1
+      name = "#{base}#{counter}"
+    end
+    map = {
+      "name" => name,
+      "width" => w,
+      "height" => h,
+      "tileset" => @tileset_path,
+      "tiles" => Array.new(w) { Array.new(h, 0) },
+      "rot" => Array.new(w) { Array.new(h, 0) },
+      "mirror_x" => Array.new(w) { Array.new(h, false) },
+      "mirror_y" => Array.new(w) { Array.new(h, false) }
+    }
+    @maps << map
+    @current_index = @maps.size - 1
+    save_current
+    load_tileset
+    load_tile_types
+  end
+
+  def delete_current
+    return if @maps.size <= 1
+    File.delete("data/maps/#{current_map['name']}.json")
+    @maps.delete_at(@current_index)
+    @current_index = 0 if @current_index >= @maps.size
+    load_tileset
+    load_tile_types
+  end
+
+  def current_map
+    @maps[@current_index]
+  end
+
+  # ========== ТАЙЛСЕТ ==========
+  def load_tileset
+    if File.exist?(@tileset_path)
+      @tiles = Gosu::Image.load_tiles(@tileset_path, TILE_SIZE, TILE_SIZE)
     else
       @tiles = []
-      puts "Tileset not found, using colored squares"
     end
-
-    @selected_tile = 0
-    @palette_scroll = 0
-    @visible_tiles_rows = (height - 160) / TILE_SIZE   # оставляем место для кнопок
-
-    @right_click_mode = MODE_ROTATE
-
-    # Координаты кнопок (верхний правый угол)
-    @btn_rotate_rect = nil
-    @btn_h_rect = nil
-    @btn_v_rect = nil
   end
 
-  def load_map
-    return unless File.exist?("data/map.json")
-    data = JSON.parse(File.read("data/map.json"))
-    @map = data["tiles"] if data["tiles"]
-    @map_rot = data["tiles_rot"] if data["tiles_rot"]
-    @map_mirror_x = data["tiles_mirror_x"] if data["tiles_mirror_x"]
-    @map_mirror_y = data["tiles_mirror_y"] if data["tiles_mirror_y"]
-    @map_rot ||= Array.new(MAP_W) { Array.new(MAP_H, 0) }
-    @map_mirror_x ||= Array.new(MAP_W) { Array.new(MAP_H, false) }
-    @map_mirror_y ||= Array.new(MAP_W) { Array.new(MAP_H, false) }
+  # ========== ТИПЫ ТАЙЛОВ ==========
+  def load_tile_types
+    @tile_types = Array.new(@tiles.size, 0)
+    if File.exist?("data/tile_types.json")
+      types = JSON.parse(File.read("data/tile_types.json"))
+      @tile_types = types
+    end
+    @tile_types += Array.new(@tiles.size - @tile_types.size, 0) if @tile_types.size < @tiles.size
   end
 
-  def save_map
-    data = {
-      tiles: @map,
-      tiles_rot: @map_rot,
-      tiles_mirror_x: @map_mirror_x,
-      tiles_mirror_y: @map_mirror_y
-    }
-    File.write("data/map.json", JSON.pretty_generate(data))
-    puts "Map saved"
+  def save_tile_types
+    File.write("data/tile_types.json", JSON.pretty_generate(@tile_types))
   end
 
+  def load_type_icons
+    @type_icons = []
+    ["passable.png", "block.png", "slow.png", "under.png"].each do |icon|
+      path = "assets/icons/#{icon}"
+      if File.exist?(path)
+        @type_icons << Gosu::Image.new(path)
+      else
+        @type_icons << Gosu::Image.new(32, 32, color: Gosu::Color::RED)
+      end
+    end
+  end
+
+  # ========== ОТРИСОВКА ==========
   def draw
     Gosu.draw_rect(0, 0, width, height, Gosu::Color::GRAY, -1)
-    draw_tileset_palette
+    draw_map_list
+    draw_palette
     draw_map
     draw_ui
-    draw_mode_buttons
+    draw_toolbar
   end
 
-  def draw_tileset_palette
+  def draw_map_list
+    x = MAP_LIST_START_X
+    y = MAP_LIST_START_Y
+    @font.draw_text("MAPS", x, y, 2)
+    @maps.each_with_index do |map, i|
+      y += MAP_LIST_ITEM_H
+      color = (i == @current_index) ? Gosu::Color::GREEN : Gosu::Color::WHITE
+      @font.draw_text(map['name'], x, y, 2, 1, 1, color)
+    end
+    y += MAP_BUTTONS_Y_OFFSET
+    MAP_BUTTONS.each do |label|
+      Gosu.draw_rect(x, y, MAP_BUTTON_W, MAP_BUTTON_H, Gosu::Color::GRAY, 1)
+      @font.draw_text(label, x + 5, y + 8, 2)
+      y += MAP_BUTTON_H + 5
+    end
+  end
+
+  def draw_palette
     return if @tiles.empty?
-    total_rows = (@tiles.size + TILESET_COLS - 1) / TILESET_COLS
+    x = PALETTE_START_X
+    y = PALETTE_START_Y
+    visible_rows = (height - y) / TILE_SIZE
     start_row = @palette_scroll
-    end_row = [start_row + @visible_tiles_rows, total_rows].min
+    total_rows = (@tiles.size + TILESET_COLS - 1) / TILESET_COLS
+    end_row = [start_row + visible_rows, total_rows].min
 
     (start_row...end_row).each do |row|
       (0...TILESET_COLS).each do |col|
         idx = row * TILESET_COLS + col
         next if idx >= @tiles.size
-        x = 10 + col * TILE_SIZE
-        y = 60 + (row - start_row) * TILE_SIZE   # отодвинул ниже
-        @tiles[idx].draw(x, y, 0)
+        px = x + col * TILE_SIZE
+        py = y + (row - start_row) * TILE_SIZE
+        @tiles[idx].draw(px, py, 0)
 
         if idx == @selected_tile
           alpha = (Gosu.milliseconds / 100) % 2 == 0 ? 150 : 0
-          Gosu.draw_rect(x, y, TILE_SIZE, TILE_SIZE, Gosu::Color.new(alpha, 255, 255, 255), 1)
+          Gosu.draw_rect(px, py, TILE_SIZE, TILE_SIZE, Gosu::Color.new(alpha, 255, 255, 255), 1)
+        end
+
+        if @mode == :assign
+          type = @tile_types[idx]
+          @type_icons[type].draw(px + 2, py + 2, 1) if type < @type_icons.size
         end
       end
     end
   end
 
   def draw_map
-    map_x = PALETTE_WIDTH
-    (0...MAP_W).each do |x|
-      (0...MAP_H).each do |y|
-        px = map_x + x * TILE_SIZE
-        py = y * TILE_SIZE
-        tile_id = @map[x][y]
-        rot = @map_rot[x][y] % 4
-        mirror_x = @map_mirror_x[x][y] ? -1.0 : 1.0
-        mirror_y = @map_mirror_y[x][y] ? -1.0 : 1.0
+    map = current_map
+    return unless map
+    (0...map['width']).each do |x|
+      (0...map['height']).each do |y|
+        px = MAP_AREA_X + x * TILE_SIZE * @camera[:zoom] - @camera[:x]
+        py = y * TILE_SIZE * @camera[:zoom] - @camera[:y]
+        next if px + TILE_SIZE*@camera[:zoom] < 0 || px > width || py + TILE_SIZE*@camera[:zoom] < 0 || py > height
+
+        tile_id = map['tiles'][x][y]
+        rot = map['rot'][x][y] % 4
+        mirror_x = map['mirror_x'][x][y] ? -1.0 : 1.0
+        mirror_y = map['mirror_y'][x][y] ? -1.0 : 1.0
         angle = rot * 90
 
         if @tiles[tile_id]
-          @tiles[tile_id].draw_rot(px + TILE_SIZE/2, py + TILE_SIZE/2, 0, angle, 0.5, 0.5, mirror_x, mirror_y)
+          @tiles[tile_id].draw_rot(px + (TILE_SIZE*@camera[:zoom])/2, py + (TILE_SIZE*@camera[:zoom])/2, 0, angle, 0.5, 0.5, mirror_x, mirror_y)
         else
-          Gosu.draw_rect(px, py, TILE_SIZE, TILE_SIZE, Gosu::Color::GREEN, 0)
+          Gosu.draw_rect(px, py, TILE_SIZE*@camera[:zoom], TILE_SIZE*@camera[:zoom], Gosu::Color::GREEN, 0)
         end
-        Gosu.draw_rect(px, py, TILE_SIZE, 1, Gosu::Color::BLACK, 1)
-        Gosu.draw_rect(px, py, 1, TILE_SIZE, Gosu::Color::BLACK, 1)
+        Gosu.draw_rect(px, py, TILE_SIZE*@camera[:zoom], 1, Gosu::Color::BLACK, 1)
+        Gosu.draw_rect(px, py, 1, TILE_SIZE*@camera[:zoom], Gosu::Color::BLACK, 1)
       end
     end
   end
 
-  def draw_mode_buttons
-    # Три кнопки в правой части верхней панели (под заголовком)
-    btn_width = 100
-    btn_height = 30
-    spacing = 10
-    start_x = width - (btn_width * 3 + spacing * 2) - 10
-
-    # Кнопка Rotate
-    @btn_rotate_rect = [start_x, 10, btn_width, btn_height]
-    color_rotate = (@right_click_mode == MODE_ROTATE) ? Gosu::Color::GREEN : Gosu::Color::GRAY
-    Gosu.draw_rect(start_x, 10, btn_width, btn_height, color_rotate, 1)
-    @font.draw_text("Rotate", start_x + 25, 18, 2)
-
-    # Кнопка Mirror H
-    @btn_h_rect = [start_x + btn_width + spacing, 10, btn_width, btn_height]
-    color_h = (@right_click_mode == MODE_MIRROR_H) ? Gosu::Color::GREEN : Gosu::Color::GRAY
-    Gosu.draw_rect(start_x + btn_width + spacing, 10, btn_width, btn_height, color_h, 1)
-    @font.draw_text("Mirror H", start_x + btn_width + spacing + 15, 18, 2)
-
-    # Кнопка Mirror V
-    @btn_v_rect = [start_x + 2 * (btn_width + spacing), 10, btn_width, btn_height]
-    color_v = (@right_click_mode == MODE_MIRROR_V) ? Gosu::Color::GREEN : Gosu::Color::GRAY
-    Gosu.draw_rect(start_x + 2 * (btn_width + spacing), 10, btn_width, btn_height, color_v, 1)
-    @font.draw_text("Mirror V", start_x + 2 * (btn_width + spacing) + 15, 18, 2)
-  end
-
   def draw_ui
-    # Кнопка Save
-    save_x = PALETTE_WIDTH + MAP_W * TILE_SIZE - 80
-    save_y = MAP_H * TILE_SIZE + 10
-    Gosu.draw_rect(save_x, save_y, 70, 30, Gosu::Color::GRAY, 1)
-    @font.draw_text("Save", save_x + 15, save_y + 8, 2)
-
-    @font.draw_text("Left click (hold): draw tile", 10, 10, 2)
-    @font.draw_text("Right click: apply transformation (select above)", 10, 35, 2)
-    @font.draw_text("Scroll wheel: scroll tileset", 10, height - 25, 2)
+    @font.draw_text("Mode: #{@mode == :draw ? 'DRAW (A)' : 'ASSIGN (C)'}", MAP_AREA_X + 10, 10, 2)
+    @font.draw_text("Zoom: #{(@camera[:zoom]*100).to_i}%", width - 120, 10, 2)
+    @font.draw_text("Left: draw/assign | Right: transform | Wheel: zoom | Ctrl+Right drag: pan", 10, height - 20, 2)
   end
 
+  def draw_toolbar
+    btn_y = 10
+    # Кнопка A
+    Gosu.draw_rect(BTN_A_X, btn_y, BTN_A_W, BTN_A_H, @mode == :draw ? Gosu::Color::GREEN : Gosu::Color::GRAY, 1)
+    @font.draw_text("A", BTN_A_X + 20, btn_y + 8, 2)
+    # Кнопка C
+    Gosu.draw_rect(BTN_C_X, btn_y, BTN_C_W, BTN_C_H, @mode == :assign ? Gosu::Color::GREEN : Gosu::Color::GRAY, 1)
+    @font.draw_text("C", BTN_C_X + 20, btn_y + 8, 2)
+
+    # Save
+    btn_save_x = width - BTN_SAVE_W - 10
+    Gosu.draw_rect(btn_save_x, btn_y, BTN_SAVE_W, BTN_SAVE_H, Gosu::Color::GRAY, 1)
+    @font.draw_text("Save", btn_save_x + 15, btn_y + 8, 2)
+
+    # Режимы трансформации
+    trans_start_x = width - TRANS_X_OFFSET
+    TRANS_MODES.each_with_index do |mode, i|
+      x = trans_start_x + i * (TRANS_W + 5)
+      color = (@right_click_mode == mode) ? Gosu::Color::GREEN : Gosu::Color::GRAY
+      Gosu.draw_rect(x, btn_y, TRANS_W, TRANS_H, color, 1)
+      @font.draw_text(TRANS_LABELS[i], x + 5, btn_y + 8, 2)
+    end
+
+    if @mode == :assign
+      y = TYPE_ICONS_Y
+      @type_icons.each_with_index do |icon, i|
+        x = TYPE_ICONS_START_X + i * TYPE_ICONS_GAP
+        if @current_type == i
+          Gosu.draw_rect(x - 2, y - 2, TYPE_ICON_SIZE + 4, TYPE_ICON_SIZE + 4, Gosu::Color::GREEN, 1)
+        end
+        icon.draw(x, y, 1)
+      end
+    end
+  end
+
+  # ========== ОБРАБОТКА ВВОДА ==========
   def update
+    handle_mouse
+    handle_keyboard
+  end
+
+  def handle_mouse
     if Gosu.button_down?(Gosu::MsLeft)
       handle_left_click
+    end
+    if Gosu.button_down?(Gosu::MsRight) && Gosu.button_down?(Gosu::KB_LEFT_CONTROL)
+      dx = mouse_x - @drag_x if @drag_x
+      dy = mouse_y - @drag_y if @drag_y
+      @camera[:x] -= dx if dx
+      @camera[:y] -= dy if dy
+      @drag_x = mouse_x
+      @drag_y = mouse_y
+    else
+      @drag_x = nil
+      @drag_y = nil
+    end
+  end
+
+  def handle_keyboard
+    if Gosu.button_down?(Gosu::KB_UP)
+      @palette_scroll -= 1 if @palette_scroll > 0
+      sleep 0.05
+    end
+    if Gosu.button_down?(Gosu::KB_DOWN)
+      max = (@tiles.size + TILESET_COLS - 1) / TILESET_COLS - (height - PALETTE_START_Y) / TILE_SIZE
+      @palette_scroll += 1 if @palette_scroll < max
+      sleep 0.05
+    end
+    if Gosu.button_down?(Gosu::KB_A)
+      @mode = :draw
+    end
+    if Gosu.button_down?(Gosu::KB_C)
+      @mode = :assign
+    end
+    if Gosu.button_down?(Gosu::KB_LEFT_CONTROL) && Gosu.button_down?(Gosu::KB_S)
+      save_current
+      save_tile_types
     end
   end
 
   def button_down(id)
     case id
-    when Gosu::MsRight
-      handle_right_click
-    when Gosu::MsLeft
-      # Проверка клика по кнопкам режимов (приоритет над рисованием)
-      check_mode_buttons
     when Gosu::MsWheelUp
-      @palette_scroll -= 1 if @palette_scroll > 0
+      @camera[:zoom] *= 1.1
+      @camera[:zoom] = [@camera[:zoom], 3.0].min
     when Gosu::MsWheelDown
-      total_rows = (@tiles.size + TILESET_COLS - 1) / TILESET_COLS
-      max_scroll = [0, total_rows - @visible_tiles_rows].max
-      @palette_scroll += 1 if @palette_scroll < max_scroll
-    else
-      # клавиши R, H, V для смены режима
-      if id == Gosu::KB_R
-        @right_click_mode = MODE_ROTATE
-      elsif id == Gosu::KB_H
-        @right_click_mode = MODE_MIRROR_H
-      elsif id == Gosu::KB_V
-        @right_click_mode = MODE_MIRROR_V
+      @camera[:zoom] /= 1.1
+      @camera[:zoom] = [@camera[:zoom], 0.3].max
+    when Gosu::MsRight
+      unless Gosu.button_down?(Gosu::KB_LEFT_CONTROL)
+        handle_right_click
       end
-    end
-  end
-
-  def check_mode_buttons
-    mx, my = mouse_x, mouse_y
-    # Кнопка Rotate
-    if @btn_rotate_rect && mx.between?(@btn_rotate_rect[0], @btn_rotate_rect[0] + @btn_rotate_rect[2]) &&
-       my.between?(@btn_rotate_rect[1], @btn_rotate_rect[1] + @btn_rotate_rect[3])
-      @right_click_mode = MODE_ROTATE
-      return
-    end
-    # Кнопка Mirror H
-    if @btn_h_rect && mx.between?(@btn_h_rect[0], @btn_h_rect[0] + @btn_h_rect[2]) &&
-       my.between?(@btn_h_rect[1], @btn_h_rect[1] + @btn_h_rect[3])
-      @right_click_mode = MODE_MIRROR_H
-      return
-    end
-    # Кнопка Mirror V
-    if @btn_v_rect && mx.between?(@btn_v_rect[0], @btn_v_rect[0] + @btn_v_rect[2]) &&
-       my.between?(@btn_v_rect[1], @btn_v_rect[1] + @btn_v_rect[3])
-      @right_click_mode = MODE_MIRROR_V
-      return
     end
   end
 
   def handle_left_click
     mx, my = mouse_x, mouse_y
 
-    # Выбор тайла из палитры (палитра теперь сдвинута вниз, y начинается с 60)
-    if mx >= 10 && mx < 10 + TILESET_COLS * TILE_SIZE && my >= 60
-      col = ((mx - 10) / TILE_SIZE).to_i
-      row = ((my - 60) / TILE_SIZE).to_i + @palette_scroll
+    # ----- Список карт и кнопки -----
+    if mx >= MAP_LIST_START_X && mx <= MAP_LIST_START_X + MAP_BUTTON_W
+      y = MAP_LIST_START_Y + MAP_LIST_ITEM_H
+      @maps.each_with_index do |_, i|
+        y += MAP_LIST_ITEM_H
+        if my.between?(y - MAP_LIST_ITEM_H, y)
+          @current_index = i
+          load_tileset
+          load_tile_types
+          return
+        end
+      end
+      y += MAP_BUTTONS_Y_OFFSET
+      MAP_BUTTONS.each do |label|
+        if my.between?(y, y + MAP_BUTTON_H)
+          case label
+          when "Prev" then @current_index = (@current_index - 1) % @maps.size
+          when "Next" then @current_index = (@current_index + 1) % @maps.size
+          when "New"  then create_map("map#{@maps.size}", DEFAULT_WIDTH, DEFAULT_HEIGHT)
+          when "Del"  then delete_current
+          end
+          load_tileset
+          load_tile_types
+          return
+        end
+        y += MAP_BUTTON_H + 5
+      end
+    end
+
+    # ----- Кнопки A / C / Save -----
+    if my.between?(10, 10 + BTN_A_H)
+      if mx.between?(BTN_A_X, BTN_A_X + BTN_A_W)
+        @mode = :draw
+        return
+      elsif mx.between?(BTN_C_X, BTN_C_X + BTN_C_W)
+        @mode = :assign
+        return
+      else
+        btn_save_x = width - BTN_SAVE_W - 10
+        if mx.between?(btn_save_x, btn_save_x + BTN_SAVE_W)
+          save_current
+          save_tile_types
+          return
+        end
+      end
+    end
+
+    # ----- Кнопки трансформации -----
+    if my.between?(10, 10 + TRANS_H)
+      trans_start_x = width - TRANS_X_OFFSET
+      TRANS_MODES.each_with_index do |mode, i|
+        x = trans_start_x + i * (TRANS_W + 5)
+        if mx.between?(x, x + TRANS_W)
+          @right_click_mode = mode
+          return
+        end
+      end
+    end
+
+    # ----- Выбор типа (assign) -----
+    if @mode == :assign && my.between?(TYPE_ICONS_Y, TYPE_ICONS_Y + TYPE_ICON_SIZE)
+      @type_icons.each_with_index do |_, i|
+        x = TYPE_ICONS_START_X + i * TYPE_ICONS_GAP
+        if mx.between?(x, x + TYPE_ICON_SIZE)
+          @current_type = i
+          return
+        end
+      end
+    end
+
+    # ----- Выбор тайла из палитры -----
+    if mx >= PALETTE_START_X && mx < PALETTE_START_X + TILESET_COLS * TILE_SIZE && my >= PALETTE_START_Y
+      col = ((mx - PALETTE_START_X) / TILE_SIZE).to_i
+      row = ((my - PALETTE_START_Y) / TILE_SIZE).to_i + @palette_scroll
       idx = row * TILESET_COLS + col
       if idx >= 0 && idx < @tiles.size
-        @selected_tile = idx
+        if @mode == :assign
+          @tile_types[idx] = @current_type
+          save_tile_types
+        else
+          @selected_tile = idx
+        end
       end
       return
     end
 
-    # Рисование на карте
-    map_x_start = PALETTE_WIDTH
-    if mx >= map_x_start && mx < map_x_start + MAP_W * TILE_SIZE && my >= 0 && my < MAP_H * TILE_SIZE
-      gx = ((mx - map_x_start) / TILE_SIZE).to_i
-      gy = (my / TILE_SIZE).to_i
-      @map[gx][gy] = @selected_tile
-      @map_rot[gx][gy] = 0
-      @map_mirror_x[gx][gy] = false
-      @map_mirror_y[gx][gy] = false
-    end
-
-    # Кнопка Save
-    save_x = PALETTE_WIDTH + MAP_W * TILE_SIZE - 80
-    save_y = MAP_H * TILE_SIZE + 10
-    if mx.between?(save_x, save_x + 70) && my.between?(save_y, save_y + 30)
-      save_map
+    # ----- Рисование на карте -----
+    if @mode == :draw
+      map = current_map
+      return unless map
+      gx = ((mx - MAP_AREA_X + @camera[:x]) / (TILE_SIZE * @camera[:zoom])).to_i
+      gy = ((my + @camera[:y]) / (TILE_SIZE * @camera[:zoom])).to_i
+      if gx >= 0 && gx < map['width'] && gy >= 0 && gy < map['height']
+        map['tiles'][gx][gy] = @selected_tile
+        map['rot'][gx][gy] = 0
+        map['mirror_x'][gx][gy] = false
+        map['mirror_y'][gx][gy] = false
+      end
     end
   end
 
   def handle_right_click
+    map = current_map
+    return unless map
     mx, my = mouse_x, mouse_y
-    map_x_start = PALETTE_WIDTH
-    if mx >= map_x_start && mx < map_x_start + MAP_W * TILE_SIZE && my >= 0 && my < MAP_H * TILE_SIZE
-      gx = ((mx - map_x_start) / TILE_SIZE).to_i
-      gy = (my / TILE_SIZE).to_i
-
+    gx = ((mx - MAP_AREA_X + @camera[:x]) / (TILE_SIZE * @camera[:zoom])).to_i
+    gy = ((my + @camera[:y]) / (TILE_SIZE * @camera[:zoom])).to_i
+    if gx >= 0 && gx < map['width'] && gy >= 0 && gy < map['height']
       case @right_click_mode
-      when MODE_ROTATE
-        @map_rot[gx][gy] = (@map_rot[gx][gy] + 1) % 4
-      when MODE_MIRROR_H
-        @map_mirror_x[gx][gy] = !@map_mirror_x[gx][gy]
-      when MODE_MIRROR_V
-        @map_mirror_y[gx][gy] = !@map_mirror_y[gx][gy]
+      when :rotate
+        map['rot'][gx][gy] = (map['rot'][gx][gy] + 1) % 4
+      when :mirror_h
+        map['mirror_x'][gx][gy] = !map['mirror_x'][gx][gy]
+      when :mirror_v
+        map['mirror_y'][gx][gy] = !map['mirror_y'][gx][gy]
       end
     end
   end

@@ -1,23 +1,98 @@
-# Game.rb
+# game.rb
 require 'raylib'
 require_relative 'lib/database'
 require_relative 'lib/player'
 require_relative 'lib/ui'
+require 'json'
 
 shared_lib_path = Gem::Specification.find_by_name('raylib-bindings').full_gem_path + '/lib/'
 Raylib.load_lib(shared_lib_path + 'libraylib.dll')
 include Raylib
 
+def clamp(value, min, max)
+  return min if value < min
+  return max if value > max
+  value
+end
+
+# ========== ЗАГРУЗЧИК КАРТЫ ==========
+class GameMap
+  attr_reader :width, :height, :tile_size, :tileset_texture
+
+  def initialize
+    maps = Dir["data/maps/*.json"]
+    if maps.empty?
+      puts "No maps found in data/maps/"
+      @width = 20
+      @height = 15
+      @tiles = Array.new(@width) { Array.new(@height, 0) }
+      @tile_types = []
+      @tileset_texture = nil
+      return
+    end
+
+    data = JSON.parse(File.read(maps.first))
+    @width = data['width']
+    @height = data['height']
+    @tiles = data['tiles']
+    @rot = data['rot'] || Array.new(@width) { Array.new(@height, 0) }
+    @mirror_x = data['mirror_x'] || Array.new(@width) { Array.new(@height, false) }
+    @mirror_y = data['mirror_y'] || Array.new(@width) { Array.new(@height, false) }
+
+    if File.exist?("data/tile_types.json")
+      @tile_types = JSON.parse(File.read("data/tile_types.json"))
+    else
+      @tile_types = []
+    end
+
+    tileset_path = data['tileset'] || "assets/tilesets/tileset.png"
+    @tileset_texture = LoadTexture(tileset_path)
+    @tile_size = 48
+    @cols = @tileset_texture.width / @tile_size
+  end
+
+  def draw
+    return unless @tileset_texture
+    (0...@width).each do |x|
+      (0...@height).each do |y|
+        tile_id = @tiles[x][y]
+        next if tile_id.nil? || tile_id < 0
+        src_x = (tile_id % @cols) * @tile_size
+        src_y = (tile_id / @cols) * @tile_size
+        src = Rectangle.create(src_x, src_y, @tile_size, @tile_size)
+        dst = Rectangle.create(x * @tile_size, y * @tile_size, @tile_size, @tile_size)
+        DrawTexturePro(@tileset_texture, src, dst, Vector2.create(0, 0), 0, WHITE)
+      end
+    end
+  end
+
+  def passable?(x, y)
+    return false if x < 0 || x >= @width || y < 0 || y >= @height
+    tile_id = @tiles[x][y]
+    type = @tile_types[tile_id] || 0
+    type != 1
+  end
+end
+
+# ========== ОСНОВНАЯ ИГРА ==========
 class Game
   def initialize
     InitWindow(576, 480, "RPG Shinzo")
     SetTargetFPS(60)
     
     @db = Database.new
-    @player = Player.new
+    @game_map = GameMap.new
+    @player = Player.new(@game_map)
     @menu = BottomMenu.new
     @status_overlay = StatusOverlay.new
     @game_state = :playing
+
+    # Создаём камеру
+    @camera = Camera2D.new
+    @camera.zoom = 1.0
+    @camera.offset = Vector2.create(288, 240)  # центр экрана 576/2, 480/2
+    @camera.target = Vector2.create(@player.x * @game_map.tile_size + 24,
+                                    @player.y * @game_map.tile_size + 24)
   end
   
   def run
@@ -65,14 +140,35 @@ class Game
     @player.update_movement if @game_state == :playing
     @menu.update if @game_state == :menu
     @status_overlay.update if @game_state == :status
+
+    # Обновление камеры
+    if @game_state == :playing
+      target_x = @player.x * @game_map.tile_size + @game_map.tile_size / 2
+      target_y = @player.y * @game_map.tile_size + @game_map.tile_size / 2
+
+      # Ограничения камеры границами карты
+      half_w = 288
+      half_h = 240
+      max_x = @game_map.width * @game_map.tile_size - half_w
+      max_y = @game_map.height * @game_map.tile_size - half_h
+
+      target_x = clamp(target_x, half_w, max_x) if max_x > half_w
+      target_y = clamp(target_y, half_h, max_y) if max_y > half_h
+
+      @camera.target = Vector2.create(target_x, target_y)
+    end
   end
   
   def draw
     BeginDrawing()
     ClearBackground(RAYWHITE)
-    draw_grid
-    @player.draw
     
+    BeginMode2D(@camera)
+    @game_map.draw
+    @player.draw
+    EndMode2D()
+    
+    # UI без камеры
     case @game_state
     when :menu
       @menu.draw
@@ -82,15 +178,6 @@ class Game
     
     DrawText("FPS: #{GetFPS()}", 576 - 100, 10, 20, DARKGRAY)
     EndDrawing()
-  end
-  
-  def draw_grid
-    (0..12).each do |x|
-      DrawLine(x * 48, 0, x * 48, 480, LIGHTGRAY)
-    end
-    (0..10).each do |y|
-      DrawLine(0, y * 48, 576, y * 48, LIGHTGRAY)
-    end
   end
 end
 
