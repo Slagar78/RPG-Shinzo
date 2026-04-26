@@ -36,13 +36,13 @@ class GameMap
     @width = data['width']
     @height = data['height']
     @tiles = data['tiles']
-	if data['music']
-    @music_file = data['music']['file'] || ""
-    @music_volume = data['music']['volume'] || 0.8
-  else
-    @music_file = ""
-    @music_volume = 0.8
-  end
+    if data['music']
+      @music_file = data['music']['file'] || ""
+      @music_volume = data['music']['volume'] || 0.8
+    else
+      @music_file = ""
+      @music_volume = 0.8
+    end
     @rot = data['rot'] || Array.new(@width) { Array.new(@height, 0) }
     @mirror_x = data['mirror_x'] || Array.new(@width) { Array.new(@height, false) }
     @mirror_y = data['mirror_y'] || Array.new(@width) { Array.new(@height, false) }
@@ -56,7 +56,28 @@ class GameMap
     tileset_path = data['tileset'] || "assets/tilesets/tileset.png"
     @tileset_texture = LoadTexture(tileset_path)
     @tile_size = 48
-    @cols = @tileset_texture.width / @tile_size
+    # Размеры тайлсета
+    tex_w = @tileset_texture.width
+    tex_h = @tileset_texture.height
+    @full_cols = tex_w / @tile_size   # 16
+    @full_rows = tex_h / @tile_size   # 16
+    @half_cols = @full_cols / 2       # 8
+  end
+
+  # Новый метод: по ID тайла возвращает Rectangle – область в текстуре
+  def tile_src_rect(tile_id)
+    return nil if tile_id.nil? || tile_id < 0
+    if tile_id < 128
+      # Левая половина (8x16)
+      col = tile_id % @half_cols
+      row = tile_id / @half_cols
+    else
+      # Правая половина (8x16)
+      local_id = tile_id - 128
+      col = @half_cols + (local_id % @half_cols)
+      row = local_id / @half_cols
+    end
+    Rectangle.create(col * @tile_size, row * @tile_size, @tile_size, @tile_size)
   end
 
   def draw
@@ -65,9 +86,8 @@ class GameMap
       (0...@height).each do |y|
         tile_id = @tiles[x][y]
         next if tile_id.nil? || tile_id < 0
-        src_x = (tile_id % @cols) * @tile_size
-        src_y = (tile_id / @cols) * @tile_size
-        src = Rectangle.create(src_x, src_y, @tile_size, @tile_size)
+        src = tile_src_rect(tile_id)
+        next unless src
         dst = Rectangle.create(x * @tile_size, y * @tile_size, @tile_size, @tile_size)
         DrawTexturePro(@tileset_texture, src, dst, Vector2.create(0, 0), 0, WHITE)
       end
@@ -82,10 +102,8 @@ class GameMap
         next if tile_id.nil? || tile_id < 0
         type = @tile_types[tile_id] || 0
         next unless type == 3
-
-        src_x = (tile_id % @cols) * @tile_size
-        src_y = (tile_id / @cols) * @tile_size
-        src = Rectangle.create(src_x, src_y, @tile_size, @tile_size)
+        src = tile_src_rect(tile_id)
+        next unless src
         dst = Rectangle.create(x * @tile_size, y * @tile_size, @tile_size, @tile_size)
         DrawTexturePro(@tileset_texture, src, dst, Vector2.create(0, 0), 0, WHITE)
       end

@@ -229,23 +229,43 @@ void load_tile_types(Editor *ed) { /* ... без изменений ... */
     cJSON_Delete(arr);
 }
 
-int load_tileset(Editor *ed, const char *path) { /* ... без изменений ... */
+int load_tileset(Editor *ed, const char *path) {
     free_tileset(ed);
     SDL_Surface *surface = IMG_Load(path);
     if (!surface) return 0;
+
     int cols = surface->w / TILE_SIZE;
     int rows = surface->h / TILE_SIZE;
-    ed->tile_count = cols * rows;
+    int left_cols = cols / 2;          // например 8 при cols=16
+    int right_cols = cols - left_cols; // всё остальное (8)
+
+    ed->tile_count = cols * rows;      // всё ещё 256
     ed->tiles = (SDL_Texture**)malloc(ed->tile_count * sizeof(SDL_Texture*));
+
+    int idx = 0;
+
+    // --- левая половина ---
     for (int r = 0; r < rows; r++) {
-        for (int c = 0; c < cols; c++) {
+        for (int c = 0; c < left_cols; c++) {
             SDL_Rect src = { c * TILE_SIZE, r * TILE_SIZE, TILE_SIZE, TILE_SIZE };
             SDL_Surface *tile_surf = SDL_CreateRGBSurface(0, TILE_SIZE, TILE_SIZE, 32, 0,0,0,0);
             SDL_BlitSurface(surface, &src, tile_surf, NULL);
-            ed->tiles[r * cols + c] = SDL_CreateTextureFromSurface(ed->renderer, tile_surf);
+            ed->tiles[idx++] = SDL_CreateTextureFromSurface(ed->renderer, tile_surf);
             SDL_FreeSurface(tile_surf);
         }
     }
+
+    // --- правая половина ---
+    for (int r = 0; r < rows; r++) {
+        for (int c = left_cols; c < cols; c++) {
+            SDL_Rect src = { c * TILE_SIZE, r * TILE_SIZE, TILE_SIZE, TILE_SIZE };
+            SDL_Surface *tile_surf = SDL_CreateRGBSurface(0, TILE_SIZE, TILE_SIZE, 32, 0,0,0,0);
+            SDL_BlitSurface(surface, &src, tile_surf, NULL);
+            ed->tiles[idx++] = SDL_CreateTextureFromSurface(ed->renderer, tile_surf);
+            SDL_FreeSurface(tile_surf);
+        }
+    }
+
     SDL_FreeSurface(surface);
     safe_strcpy(ed->tileset_path, sizeof(ed->tileset_path), path);
     ed->tileset_loaded = true;
