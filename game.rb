@@ -3,6 +3,7 @@ require 'raylib'
 require_relative 'lib/database'
 require_relative 'lib/player'
 require_relative 'lib/ui'
+require_relative 'lib/AudioManager'
 require 'json'
 
 shared_lib_path = Gem::Specification.find_by_name('raylib-bindings').full_gem_path + '/lib/'
@@ -17,7 +18,7 @@ end
 
 # ========== ЗАГРУЗЧИК КАРТЫ ==========
 class GameMap
-  attr_reader :width, :height, :tile_size, :tileset_texture
+  attr_reader :width, :height, :tile_size, :tileset_texture, :music_file, :music_volume
 
   def initialize
     maps = Dir["data/maps/*.json"]
@@ -35,6 +36,13 @@ class GameMap
     @width = data['width']
     @height = data['height']
     @tiles = data['tiles']
+	if data['music']
+    @music_file = data['music']['file'] || ""
+    @music_volume = data['music']['volume'] || 0.8
+  else
+    @music_file = ""
+    @music_volume = 0.8
+  end
     @rot = data['rot'] || Array.new(@width) { Array.new(@height, 0) }
     @mirror_x = data['mirror_x'] || Array.new(@width) { Array.new(@height, false) }
     @mirror_y = data['mirror_y'] || Array.new(@width) { Array.new(@height, false) }
@@ -110,6 +118,9 @@ class Game
 
     @db = Database.new
     @game_map = GameMap.new
+	Raylib.InitAudioDevice()
+    @audio = AudioManager.new
+    @audio.play(@game_map.music_file, @game_map.music_volume)
     @player = Player.new(@game_map)
     @menu = BottomMenu.new
     @status_overlay = StatusOverlay.new
@@ -128,6 +139,8 @@ class Game
       update
       draw
     end
+	@audio.stop
+    Raylib.CloseAudioDevice()
     CloseWindow()
   end
 
@@ -163,6 +176,7 @@ class Game
   end
 
   def update
+    @audio.update
     @player.update_animation
     @player.update_movement if @game_state == :playing
     @menu.update if @game_state == :menu
