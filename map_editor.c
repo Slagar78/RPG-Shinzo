@@ -1077,7 +1077,7 @@ void handle_input(Editor *ed, bool *running) {
             else if (mx >= MAP_X && mx < MAP_X + MAP_W && my >= MAP_Y && my < MAP_Y + MAP_H) {
                 if (SDL_GetKeyboardState(NULL)[SDL_SCANCODE_LCTRL]) {
                     ed->zoom += e.wheel.y * 0.1f;
-                    if (ed->zoom < 0.5f) ed->zoom = 0.5f;
+                    if (ed->zoom < 0.1f) ed->zoom = 0.1f;
                     if (ed->zoom > 2.0f) ed->zoom = 2.0f;
                 }
             }
