@@ -199,7 +199,7 @@ class Game
       smooth = 0.09
       cam_x = lerp(cam_x, target_x, smooth)
       cam_y = lerp(cam_y, target_y, smooth)
-      @camera.target = Vector2.create(cam_x, cam_y)
+      @camera.target = Vector2.create(cam_x.round, cam_y.round)
     end
   end
 
