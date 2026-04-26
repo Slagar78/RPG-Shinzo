@@ -169,6 +169,8 @@ class StatusOverlay
     @blink_timer = 0
     @blink_duration = 0
     @blink_interval = 120
+	# Плавная пульсация рамки выбора
+    @selection_blink_timer = 0
     
     load_textures
     load_actors
@@ -244,6 +246,7 @@ class StatusOverlay
     @blink_timer = 0
     @blink_duration = 0
     @blink_interval = 120
+	@selection_blink_timer = 0
   end
   
   def close
@@ -316,6 +319,8 @@ class StatusOverlay
         @blink_timer = 0
         @blink_interval = 100 + rand(50)
       end
+	  # Пульсация рамки выбора
+      @selection_blink_timer += 1
     end
   end
   
@@ -365,7 +370,10 @@ class StatusOverlay
       y = @lower_y + 71 + i * 34
       
       if member["name"] == @current_actor
-        DrawRectangle(@lower_x + 38, y - 4, 138, 28, WHITE)
+        pulse = Math.sin(@selection_blink_timer * 0.2) * 0.4 + 0.6
+        alpha = (pulse * 255).to_i
+        highlight = Raylib.Fade(Raylib::BLUE, alpha / 255.0)
+        Raylib.DrawRectangle(@lower_x + 38, y - 4, 138, 28, highlight)
       end
       
       draw_text_custom(member["name"], @lower_x + 44, y, 18, WHITE)
