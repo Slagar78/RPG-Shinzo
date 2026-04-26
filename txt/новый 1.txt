@@ -1,0 +1,9 @@
+C:\Users\СЛЭГАР>ruby -e "spec = Gem::Specification.find_by_name('raylib-bindings'); puts spec.full_gem_path; puts Dir[spec.full_gem_path + '/**/*raylib*.dll']"
+C:/Ruby40-x64/lib/ruby/gems/4.0.0/gems/raylib-bindings-0.7.18-x64-mingw
+C:/Ruby40-x64/lib/ruby/gems/4.0.0/gems/raylib-bindings-0.7.18-x64-mingw/lib/libraylib.dll
+
+C:\Users\СЛЭГАР>ruby -v
+ruby 4.0.2 (2026-03-17 revision d3da9fec82) +PRISM [x64-mingw-ucrt]
+
+C:\Users\СЛЭГАР>gem list raylib-bindings
+raylib-bindings (0.7.18 x64-mingw)
