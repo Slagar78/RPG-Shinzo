@@ -203,7 +203,24 @@ class StatusOverlay
       @party = []
     end
   end
-  
+ 
+   # Рисует название предмета с переносом, если оно из двух слов (как в SF2)
+  def draw_item_name(text, x, y, size, color)
+    if text.include?(' ')
+      # Разбиваем на два слова по первому пробелу
+      first_word = text[0...text.index(' ')].strip
+      second_word = text[text.index(' ') + 1..-1].strip
+
+      # Первая строка — как обычно
+      draw_text_custom(first_word, x, y, size, color)
+
+      # Вторая строка — смещена вниз (как в JS: itemSplitOffset = 15) и вправо (secondLineIndent = 14)
+      draw_text_custom(second_word, x + 14, y + 15, size, color)
+    else
+      draw_text_custom(text, x, y, size, color)
+    end
+  end
+ 
   def load_portrait(name)
     return nil unless name
     path = "assets/ui/portraits/#{name}.png"
@@ -362,8 +379,9 @@ class StatusOverlay
     draw_text_custom("DISPEL Lv1", @upper_x + 25, @upper_y + 140, 20, WHITE)
     draw_text_custom("DESOUL Lv1", @upper_x + 25, @upper_y + 174, 20, WHITE)
     
-    draw_text_custom("Medical Herb", @upper_x + 195, @upper_y + 64, 18, WHITE)
-    draw_text_custom("Healing Seed", @upper_x + 195, @upper_y + 97, 18, WHITE)
+    # Предметы с переносом (как в Shining Force 2)
+    draw_item_name("Medical Herb", @upper_x + 195, @upper_y + 64, 18, WHITE)
+    draw_item_name("Healing Seed", @upper_x + 195, @upper_y + 97, 18, WHITE)
     
     # Нижняя панель — список партии
     @party.each_with_index do |member, i|
