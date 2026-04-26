@@ -93,6 +93,7 @@ typedef struct {
     Sint32 pan_start_x, pan_start_y;
 
     int right_click_mode;
+	float zoom;                     // масштаб карты, по умолчанию 1.0
     SDL_Texture *transform_icons[3];
 
     bool dialog_active;
@@ -136,6 +137,7 @@ void editor_init(Editor *ed) {
     ed->map_list.maps = NULL;
     ed->map_list.map_count = 0;
     ed->map_list.current_map = 0;
+	ed->zoom = 1.0f;
 }
 
 void free_tileset(Editor *ed) {
@@ -718,15 +720,28 @@ void render_toolbar(Editor *ed) { /* ... */
 }
 
 // Карта (без изменений)
-void render_map(Editor *ed) { /* ... */
+void render_map(Editor *ed) {
     Map *map = current_map(ed);
     if (!map || !ed->tileset_loaded) return;
+
+    float zoom = ed->zoom;
+    float scaled_tile = TILE_SIZE * zoom;
 
     SDL_Rect map_area = { MAP_X, MAP_Y, MAP_W, MAP_H };
     SDL_RenderSetClipRect(ed->renderer, &map_area);
 
-    for (int x = 0; x < map->width; x++) {
-        for (int y = 0; y < map->height; y++) {
+    int start_x = (int)(ed->cam_x / TILE_SIZE);
+    int start_y = (int)(ed->cam_y / TILE_SIZE);
+    int end_x = start_x + (int)(MAP_W / scaled_tile) + 1;
+    int end_y = start_y + (int)(MAP_H / scaled_tile) + 1;
+
+    if (start_x < 0) start_x = 0;
+    if (start_y < 0) start_y = 0;
+    if (end_x > map->width) end_x = map->width;
+    if (end_y > map->height) end_y = map->height;
+
+    for (int x = start_x; x < end_x; x++) {
+        for (int y = start_y; y < end_y; y++) {
             int idx = x * map->height + y;
             int tile_id = map->tiles[idx];
             if (tile_id < 0 || tile_id >= ed->tile_count) continue;
@@ -737,31 +752,36 @@ void render_map(Editor *ed) { /* ... */
             if (map->mirror_x[idx]) flip |= SDL_FLIP_HORIZONTAL;
             if (map->mirror_y[idx]) flip |= SDL_FLIP_VERTICAL;
 
-            SDL_Rect dst = {
-                (int)(MAP_X + x * TILE_SIZE - ed->cam_x),
-                (int)(MAP_Y + y * TILE_SIZE - ed->cam_y),
-                TILE_SIZE, TILE_SIZE
+            // Используем SDL_FRect для плавных координат
+            SDL_FRect dst = {
+                MAP_X + (x * TILE_SIZE - ed->cam_x) * zoom,
+                MAP_Y + (y * TILE_SIZE - ed->cam_y) * zoom,
+                scaled_tile,
+                scaled_tile
             };
-            SDL_Point center = { TILE_SIZE/2, TILE_SIZE/2 };
-            SDL_RenderCopyEx(ed->renderer, tex, NULL, &dst, angle, &center, flip);
+            SDL_FPoint center = { scaled_tile / 2.0f, scaled_tile / 2.0f };
+            SDL_RenderCopyExF(ed->renderer, tex, NULL, &dst, angle, &center, flip);
         }
     }
 
+    // Подсветка тайла под мышью (тоже через SDL_FRect)
     int mx, my;
     SDL_GetMouseState(&mx, &my);
     if (mx >= MAP_X && mx < MAP_X + MAP_W && my >= MAP_Y && my < MAP_Y + MAP_H) {
-        int world_x = (int)(mx - MAP_X + ed->cam_x);
-        int world_y = (int)(my - MAP_Y + ed->cam_y);
-        int tx = world_x / TILE_SIZE;
-        int ty = world_y / TILE_SIZE;
+        float world_x = (mx - MAP_X) / zoom + ed->cam_x;
+        float world_y = (my - MAP_Y) / zoom + ed->cam_y;
+        int tx = (int)(world_x / TILE_SIZE);
+        int ty = (int)(world_y / TILE_SIZE);
         if (tx >= 0 && tx < map->width && ty >= 0 && ty < map->height) {
-            SDL_Rect hl = {
-                (int)(MAP_X + tx * TILE_SIZE - ed->cam_x),
-                (int)(MAP_Y + ty * TILE_SIZE - ed->cam_y),
-                TILE_SIZE, TILE_SIZE
+            SDL_FRect hl = {
+                MAP_X + (tx * TILE_SIZE - ed->cam_x) * zoom,
+                MAP_Y + (ty * TILE_SIZE - ed->cam_y) * zoom,
+                scaled_tile,
+                scaled_tile
             };
             SDL_SetRenderDrawColor(ed->renderer, 255, 255, 0, 255);
-            SDL_RenderDrawRect(ed->renderer, &hl);
+            // Прямоугольник рисуем всё ещё целым, но можно и SDL_RenderDrawRectF
+            SDL_RenderDrawRectF(ed->renderer, &hl); // SDL_RenderDrawRectF есть в SDL2
         }
     }
 
@@ -1043,7 +1063,7 @@ void handle_input(Editor *ed, bool *running) {
             continue;
         }
 
-        // Скролл палитры
+        // Скролл палитры и зум карты
         if (e.type == SDL_MOUSEWHEEL) {
             int mx, my;
             SDL_GetMouseState(&mx, &my);
@@ -1053,6 +1073,13 @@ void handle_input(Editor *ed, bool *running) {
                                  ((WINDOW_H - PALETTE_START_Y) / (PALETTE_TILE_SIZE + 2));
                 if (ed->palette_scroll < 0) ed->palette_scroll = 0;
                 if (max_scroll > 0 && ed->palette_scroll > max_scroll) ed->palette_scroll = max_scroll;
+            }
+            else if (mx >= MAP_X && mx < MAP_X + MAP_W && my >= MAP_Y && my < MAP_Y + MAP_H) {
+                if (SDL_GetKeyboardState(NULL)[SDL_SCANCODE_LCTRL]) {
+                    ed->zoom += e.wheel.y * 0.1f;
+                    if (ed->zoom < 0.5f) ed->zoom = 0.5f;
+                    if (ed->zoom > 2.0f) ed->zoom = 2.0f;
+                }
             }
         }
 
@@ -1071,8 +1098,8 @@ void handle_input(Editor *ed, bool *running) {
             !(SDL_GetKeyboardState(NULL)[SDL_SCANCODE_LCTRL]) && ed->right_click_mode != 0) {
             int mx = e.button.x, my = e.button.y;
             if (mx >= MAP_X && mx < MAP_X + MAP_W && my >= MAP_Y && my < MAP_Y + MAP_H) {
-                int world_x = (int)(mx - MAP_X + ed->cam_x);
-                int world_y = (int)(my - MAP_Y + ed->cam_y);
+                float world_x = (mx - MAP_X) / ed->zoom + ed->cam_x;
+                float world_y = (my - MAP_Y) / ed->zoom + ed->cam_y;
                 int tx = world_x / TILE_SIZE, ty = world_y / TILE_SIZE;
                 Map *map = current_map(ed);
                 if (map && tx >= 0 && tx < map->width && ty >= 0 && ty < map->height) {
@@ -1103,8 +1130,8 @@ void handle_input(Editor *ed, bool *running) {
                 else ed->right_click_mode = 0;
             }
             else if (mx >= MAP_X && mx < MAP_X+MAP_W && my >= MAP_Y && my < MAP_Y+MAP_H) {
-                int world_x = (int)(mx - MAP_X + ed->cam_x);
-                int world_y = (int)(my - MAP_Y + ed->cam_y);
+                float world_x = (mx - MAP_X) / ed->zoom + ed->cam_x;
+                float world_y = (my - MAP_Y) / ed->zoom + ed->cam_y;
                 int tx = world_x / TILE_SIZE, ty = world_y / TILE_SIZE;
                 Map *map = current_map(ed);
                 if (map && tx >= 0 && tx < map->width && ty >= 0 && ty < map->height) {
@@ -1141,13 +1168,19 @@ void handle_input(Editor *ed, bool *running) {
     if (ed->panning && !ed->dialog_active) {
         int mx, my;
         SDL_GetMouseState(&mx, &my);
-        ed->cam_x -= (mx - ed->pan_start_x);
-        ed->cam_y -= (my - ed->pan_start_y);
-        ed->pan_start_x = mx; ed->pan_start_y = my;
+        float dx = (mx - ed->pan_start_x) / ed->zoom;
+        float dy = (my - ed->pan_start_y) / ed->zoom;
+        ed->cam_x -= dx;
+        ed->cam_y -= dy;
+        ed->pan_start_x = mx;
+        ed->pan_start_y = my;
+
         Map *map = current_map(ed);
         if (map) {
-            float max_x = map->width * TILE_SIZE - MAP_W;
-            float max_y = map->height * TILE_SIZE - MAP_H;
+            float max_x = map->width * TILE_SIZE - MAP_W / ed->zoom;
+            float max_y = map->height * TILE_SIZE - MAP_H / ed->zoom;
+            if (max_x < 0) max_x = 0;
+            if (max_y < 0) max_y = 0;
             if (ed->cam_x < 0) ed->cam_x = 0;
             if (ed->cam_y < 0) ed->cam_y = 0;
             if (ed->cam_x > max_x) ed->cam_x = max_x;
@@ -1161,8 +1194,8 @@ void handle_input(Editor *ed, bool *running) {
         int mx, my;
         SDL_GetMouseState(&mx, &my);
         if (mx >= MAP_X && mx < MAP_X + MAP_W && my >= MAP_Y && my < MAP_Y + MAP_H) {
-            int world_x = (int)(mx - MAP_X + ed->cam_x);
-            int world_y = (int)(my - MAP_Y + ed->cam_y);
+            float world_x = (mx - MAP_X) / ed->zoom + ed->cam_x;
+            float world_y = (my - MAP_Y) / ed->zoom + ed->cam_y;
             int tx = world_x / TILE_SIZE, ty = world_y / TILE_SIZE;
             Map *map = current_map(ed);
             if (map && tx >= 0 && tx < map->width && ty >= 0 && ty < map->height) {
@@ -1194,7 +1227,6 @@ void handle_input(Editor *ed, bool *running) {
         }
     }
 }
-
 int main(int argc, char *argv[]) {
     SDL_Init(SDL_INIT_VIDEO);
     IMG_Init(IMG_INIT_PNG);
