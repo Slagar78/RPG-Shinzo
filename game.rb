@@ -131,24 +131,55 @@ end
 # ========== ОСНОВНАЯ ИГРА ==========
 class Game
   def initialize
+    # ── Окно и целевой FPS ──────────────────────
     InitWindow(576, 480, "RPG Shinzo")
     SetTargetFPS(60)
 
+    # ── База данных предметов ──────────────────
     @db = Database.new
+
+    # ── Карта (GameMap) ─────────────────────────
     @game_map = GameMap.new
-	Raylib.InitAudioDevice()
+
+    # ── Аудиосистема ────────────────────────────
+    Raylib.InitAudioDevice()
     @audio = AudioManager.new
     @audio.play(@game_map.music_file, @game_map.music_volume)
+
+    # ── Игрок ───────────────────────────────────
     @player = Player.new(@game_map)
+
+    # ── Нижнее меню (4 плитки) ─────────────────
     @menu = BottomMenu.new
-    @status_overlay = StatusOverlay.new
+
+    # ── Загрузка шрифта с поддержкой кириллицы ──
+    codepoints = []
+    # базовая латиница (пробел, цифры, английские буквы и знаки)
+    (32..126).each { |cp| codepoints << cp }
+    # кириллица (русские буквы, включая Ё/ё)
+    (0x0400..0x04FF).each { |cp| codepoints << cp }
+
+    # Создаём низкоуровневый C-совместимый буфер для кодов символов
+    cp_ptr = FFI::MemoryPointer.new(:int, codepoints.size)
+    cp_ptr.write_array_of_int(codepoints)
+
+    # Загружаем шрифт с явным указанием нужных глифов
+    @font = LoadFontEx("assets/ui/fonts/main.ttf", 20, cp_ptr, codepoints.size)
+
+    # ── Статусный оверлей (с кастомным шрифтом) ─
+    @status_overlay = StatusOverlay.new(@font)
+
+    # ── Состояние игры ──────────────────────────
     @game_state = :playing
 
+    # ── 2D-камера для следования за игроком ─────
     @camera = Camera2D.new
     @camera.zoom = 1.0
-    @camera.offset = Vector2.create(288, 240)
-    @camera.target = Vector2.create(@player.x * @game_map.tile_size + 24,
-                                    @player.y * @game_map.tile_size + 24)
+    @camera.offset = Vector2.create(288, 240)           # центр экрана
+    @camera.target = Vector2.create(
+      @player.x * @game_map.tile_size + 24,
+      @player.y * @game_map.tile_size + 24
+    )
   end
 
   def run
@@ -159,6 +190,7 @@ class Game
     end
 	@audio.stop
     Raylib.CloseAudioDevice()
+	Raylib.UnloadFont(@font) if @font
     CloseWindow()
   end
 
