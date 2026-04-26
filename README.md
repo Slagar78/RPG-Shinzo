@@ -7,3 +7,4 @@ RPG
 | **Ruby** | 3.0+ или 4.0+ |
 | **Raylib** | 5.5+ (через гем) |raylib-bindings !
 | **Windows / Linux / macOS** | Любая |
+C + SDL2. - редактор карт

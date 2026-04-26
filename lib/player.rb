@@ -141,9 +141,9 @@ class Player
     update_movement
   end
 
-  def draw
+def draw
     px = @x * TILE_SIZE
-    py = @y * TILE_SIZE
+    py = @y * TILE_SIZE - 16   # <-- добавить смещение вверх на 1/3 тайла
 
     if @moving
       case @move_dir
@@ -171,10 +171,10 @@ class Player
 
     dst = Rectangle.create
     dst.x = px
-    dst.y = py
+    dst.y = py          # py уже со смещением -16
     dst.width = TILE_SIZE
     dst.height = TILE_SIZE
 
     DrawTexturePro(texture, src, dst, Vector2.create(0, 0), 0, WHITE)
-  end
+end
 end
