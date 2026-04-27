@@ -161,6 +161,7 @@ end
     @anim_phase = 0
     @anim_timer = 0
     @ready_to_close = false
+	@portrait_cache = {}
 	
     # Загружаем классы
     @class_names = {}
@@ -233,6 +234,8 @@ end
     @status_view_mode = 0
 	@list_top_index = 0
     @selected_actor_index = 0      # индекс текущего персонажа в party
+	@input_timer_up = 0
+    @input_timer_down = 0
     
     load_textures
     load_actors
@@ -292,27 +295,34 @@ end
     end
   end
  
-  def load_portrait(name)
-    return nil unless name
-    path = "assets/ui/portraits/#{name}.png"
-    return nil unless File.exist?(path)
-    img = Raylib.LoadImage(path)
-    tex = Raylib.LoadTextureFromImage(img)
-    Raylib.UnloadImage(img)
-    Raylib.SetTextureFilter(tex, 0)
-    tex
-  end
+def load_portrait(name)
+  return nil unless name
+  return @portrait_cache[name] if @portrait_cache.key?(name)
+
+  path = "assets/ui/portraits/#{name}.png"
+  return nil unless File.exist?(path)
+  img = Raylib.LoadImage(path)
+  tex = Raylib.LoadTextureFromImage(img)
+  Raylib.UnloadImage(img)
+  Raylib.SetTextureFilter(tex, 0)
+  @portrait_cache[name] = tex
+  tex
+end
   
-  def load_blink_portrait(name)
-    return nil unless name
-    path = "assets/ui/portraits/#{name}_blink.png"
-    return nil unless File.exist?(path)
-    img = Raylib.LoadImage(path)
-    tex = Raylib.LoadTextureFromImage(img)
-    Raylib.UnloadImage(img)
-    Raylib.SetTextureFilter(tex, 0)
-    tex
-  end
+def load_blink_portrait(name)
+  return nil unless name
+  cache_key = "#{name}_blink"
+  return @portrait_cache[cache_key] if @portrait_cache.key?(cache_key)
+
+  path = "assets/ui/portraits/#{name}_blink.png"
+  return nil unless File.exist?(path)
+  img = Raylib.LoadImage(path)
+  tex = Raylib.LoadTextureFromImage(img)
+  Raylib.UnloadImage(img)
+  Raylib.SetTextureFilter(tex, 0)
+  @portrait_cache[cache_key] = tex
+  tex
+end
   
   def open(player = nil)
     return if @visible
@@ -380,14 +390,35 @@ end
   def handle_input
   return unless @visible && @anim_phase == 2
 
+  # Закрыть меню
   if Raylib.IsKeyPressed(Raylib::KEY_A) || Raylib.IsKeyPressed(Raylib::KEY_D)
     close
-  elsif Raylib.IsKeyPressed(Raylib::KEY_LEFT) || Raylib.IsKeyPressed(Raylib::KEY_RIGHT)
+    return
+  end
+
+  # Переключение режима ←/→ (одиночное)
+  if Raylib.IsKeyPressed(Raylib::KEY_LEFT) || Raylib.IsKeyPressed(Raylib::KEY_RIGHT)
     @status_view_mode = 1 - @status_view_mode
-  elsif Raylib.IsKeyPressed(Raylib::KEY_UP)
-    change_selected_actor(-1)
-  elsif Raylib.IsKeyPressed(Raylib::KEY_DOWN)
-    change_selected_actor(1)
+  end
+
+  # Автоповтор ↑
+  if Raylib.IsKeyDown(Raylib::KEY_UP)
+    @input_timer_up += 1
+    if @input_timer_up == 1 || (@input_timer_up > 20 && (@input_timer_up - 20) % 5 == 0)
+      change_selected_actor(-1)
+    end
+  else
+    @input_timer_up = 0
+  end
+
+  # Автоповтор ↓
+  if Raylib.IsKeyDown(Raylib::KEY_DOWN)
+    @input_timer_down += 1
+    if @input_timer_down == 1 || (@input_timer_down > 20 && (@input_timer_down - 20) % 5 == 0)
+      change_selected_actor(1)
+    end
+  else
+    @input_timer_down = 0
   end
 end
   
