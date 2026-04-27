@@ -211,6 +211,13 @@ end
     end
   end
   
+  def draw_text_centered_h(text, cx, y, size, color)
+    return unless @font
+    vec = Raylib.MeasureTextEx(@font, text, size, 1)
+    x = cx - vec.x / 2
+    Raylib.DrawTextEx(@font, text, Raylib::Vector2.create(x, y), size, 1, color)
+  end
+  
   def load_textures
     @upper_tex = Raylib.LoadTexture("assets/ui/upper_panel.png")
     @lower_tex = Raylib.LoadTexture("assets/ui/lower_panel.png")
@@ -387,19 +394,19 @@ end
   
   def draw
     return unless @visible
-    
+
     origin = Raylib::Vector2.create(0, 0)
-    
+
     # Нижняя панель
     dst = Raylib::Rectangle.create(@lower_x, @lower_y, @lower_w, @lower_h)
     src = Raylib::Rectangle.create(0, 0, @lower_w, @lower_h)
     Raylib.DrawTexturePro(@lower_tex, src, dst, origin, 0, Raylib::WHITE)
-    
+
     # Верхняя панель
     dst = Raylib::Rectangle.create(@upper_x, @upper_y, @upper_w, @upper_h)
     src = Raylib::Rectangle.create(0, 0, @upper_w, @upper_h)
     Raylib.DrawTexturePro(@upper_tex, src, dst, origin, 0, Raylib::WHITE)
-    
+
     # Портрет
     if @portrait_tex
       portrait = (@blink_duration > 0 && @blink_tex) ? @blink_tex : @portrait_tex
@@ -407,28 +414,27 @@ end
       src = Raylib::Rectangle.create(0, 0, @portrait_w, @portrait_h)
       Raylib.DrawTexturePro(portrait, src, dst, origin, 0, Raylib::WHITE)
     end
-    
+
     # Рамка
     dst = Raylib::Rectangle.create(@frame_x, @frame_y, @frame_w, @frame_h)
     src = Raylib::Rectangle.create(0, 0, @frame_w, @frame_h)
     Raylib.DrawTexturePro(@frame_tex, src, dst, origin, 0, Raylib::WHITE)
-    
-    # ===== ТЕКСТ (теперь через кастомный шрифт) =====
-    
-	actor_data = @party.find { |a| a["name"] == @current_actor }
-  if actor_data
-    class_id   = actor_data["class_id"]
-    class_name = @class_names[class_id] || "???"
-    level      = actor_data["level"]
-    header     = "#{actor_data["name"]}  #{class_name}  LV #{level}"
-    draw_text_custom(header, @upper_x + 25, @upper_y + 12, 20, WHITE)
-  else
-    draw_text_custom("NO DATA", @upper_x + 25, @upper_y + 12, 20, WHITE)
-  end
-	
+
+    # ===== ВЕРХНЯЯ ПАНЕЛЬ: ТЕКСТ =====
+    actor_data = @party.find { |a| a["name"] == @current_actor }
+    if actor_data
+      class_id   = actor_data["class_id"]
+      class_name = @class_names[class_id] || "???"
+      level      = actor_data["level"]
+      header     = "#{actor_data["name"]}  #{class_name}  LV #{level}"
+      draw_text_custom(header, @upper_x + 25, @upper_y + 12, 20, WHITE)
+    else
+      draw_text_custom("NO DATA", @upper_x + 25, @upper_y + 12, 20, WHITE)
+    end
+
     draw_text_custom("Магия", @upper_x + 25, @upper_y + 42, 24, WHITE)
     draw_text_custom("Предметы", @upper_x + 195, @upper_y + 38, 24, WHITE)
-    
+
     # Магия из класса персонажа (только изученные заклинания)
     if @current_spells && @current_spells.any?
       @current_spells.each_with_index do |spell, i|
@@ -436,40 +442,58 @@ end
         draw_text_custom("#{spell["spell"]} Lv#{spell["spell_level"]}", @upper_x + 25, y, 20, WHITE)
       end
     end
-    
+
     # Предметы из start_inventory.json
     if @current_items && @current_items.any?
-     @current_items.each_with_index do |item_entry, i|
-    next if item_entry["item"] == "NOTHING"
+      @current_items.each_with_index do |item_entry, i|
+        next if item_entry["item"] == "NOTHING"
 
-     y = @upper_y + 64 + i * 33
-     draw_item_name(item_entry["item"], @upper_x + 195, y, 18, WHITE)
+        y = @upper_y + 64 + i * 33
+        draw_item_name(item_entry["item"], @upper_x + 195, y, 18, WHITE)
 
-     # Галочка/метка экипировки
-    if item_entry["equipped"]
-     draw_text_custom("E", @upper_x + 340, y, 18, YELLOW)   # или WHITE, можно жёлтым
+        # Метка экипировки
+        if item_entry["equipped"]
+          draw_text_custom("E", @upper_x + 180, y, 18, YELLOW)
+        end
+      end
     end
-  end
-end
-    
-    # Нижняя панель — список партии
+
+    # ===== НИЖНЯЯ ПАНЕЛЬ: ЗАГОЛОВКИ =====
+    header_y = @lower_y + 28
+    draw_text_custom("Имя",    @lower_x + 44,  header_y, 20, WHITE)
+    draw_text_custom("Класс",  @lower_x + 187, header_y, 20, WHITE)
+
+    # Центры для уровня и опыта (вычисляем один раз)
+    level_header_center_x = @lower_x + 290 + Raylib.MeasureTextEx(@font, "Уровень", 20, 1).x / 2
+    exp_header_center_x   = @lower_x + 395 + Raylib.MeasureTextEx(@font, "Опыт", 20, 1).x / 2
+
+    draw_text_custom("Уровень", @lower_x + 290, header_y, 20, WHITE)
+    draw_text_custom("Опыт",    @lower_x + 395, header_y, 20, WHITE)
+
+    # ===== НИЖНЯЯ ПАНЕЛЬ: СПИСОК ПАРТИИ =====
     @party.each_with_index do |member, i|
       y = @lower_y + 71 + i * 34
-      
+
+      # Подсветка выбранного персонажа
       if member["name"] == @current_actor
         pulse = Math.sin(@selection_blink_timer * 0.2) * 0.4 + 0.6
         alpha = (pulse * 255).to_i
         highlight = Raylib.Fade(Raylib::BLUE, alpha / 255.0)
         Raylib.DrawRectangle(@lower_x + 38, y - 4, 138, 28, highlight)
       end
-      
-      draw_text_custom(member["name"], @lower_x + 44, y, 18, WHITE)
-      
-	  class_name = @class_names[member["class_id"]] || "???"
-      draw_text_custom(class_name, @lower_x + 187, y, 18, WHITE)
-	  
-      draw_text_custom(member["level"].to_s, @lower_x + 290, y, 18, WHITE)
-      draw_text_custom(member["exp"].to_s, @lower_x + 395, y, 18, WHITE)
+
+      # Имя (обрезаем до 10 символов)
+      name_display = member["name"].slice(0, 10)
+      draw_text_custom(name_display, @lower_x + 44, y, 18, WHITE)
+
+      # Класс (обрезаем до 10 символов)
+      class_name = @class_names[member["class_id"]] || "???"
+      class_display = class_name.slice(0, 10)
+      draw_text_custom(class_display, @lower_x + 187, y, 18, WHITE)
+
+      # Уровень и опыт (центрированы)
+      draw_text_centered_h(member["level"].to_s, level_header_center_x, y, 18, WHITE)
+      draw_text_centered_h(member["exp"].to_s,    exp_header_center_x,   y, 18, WHITE)
     end
   end
 end
