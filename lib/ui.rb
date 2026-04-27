@@ -155,12 +155,16 @@ def change_selected_actor(delta)
 end
 
   VISIBLE_ROWS = 5
+  attr_reader :current_actor
   def initialize(font = nil)
     @font = font
     @visible = false
     @anim_phase = 0
     @anim_timer = 0
     @ready_to_close = false
+	@blink_timer = 0
+    @blink_duration = 0
+    @blink_interval = 120
 	@portrait_cache = {}
 	
     # Загружаем классы
@@ -497,8 +501,8 @@ end
     # Портрет
     if @portrait_tex
       portrait = (@blink_duration > 0 && @blink_tex) ? @blink_tex : @portrait_tex
-      dst = Raylib::Rectangle.create(@portrait_x + 2, @portrait_y + 2, @portrait_w - 4, @portrait_h - 4)
-      src = Raylib::Rectangle.create(0, 0, @portrait_w, @portrait_h)
+      dst = Raylib::Rectangle.create(@portrait_x + 2, @portrait_y + 2, 130, 204)
+      src = Raylib::Rectangle.create(0, 0, 134, 208)
       Raylib.DrawTexturePro(portrait, src, dst, origin, 0, Raylib::WHITE)
     end
 
@@ -657,6 +661,254 @@ end
           draw_text_centered_h(val.to_s, stat_centers[idx], y, 18, WHITE)
         end
       end
+    end
+ end
+end 
+  # ============================================
+# ОКНО ПРОФАЙЛА (Character Profile)
+# ============================================
+class Profile
+  def initialize(font = nil)
+    @font = font
+    @visible = false
+    @anim_phase = 0
+    @anim_timer = 0
+    @ready_to_close = false
+	@blink_timer = 0
+    @blink_duration = 0
+    @blink_interval = 120
+	@portrait_cache = {}
+
+    # Позиции панелей
+    @right_panel_target_x = 182      # правая панель на том же месте, где была верхняя в статусе
+    @right_panel_target_y = 16
+    @sub_panel_target_x = 48         # маленькая панель под портретом
+    @sub_panel_target_y = 224        # (портрет заканчивается на y=16+208=224, как раз под ним)
+
+    @right_panel_start_x = 576 + 220
+    @sub_panel_start_y = 480 + 220
+
+    @right_panel_x = @right_panel_start_x
+    @right_panel_y = @right_panel_target_y
+    @sub_panel_x = @sub_panel_target_x
+    @sub_panel_y = @sub_panel_start_y
+
+    # Размеры панелей
+    @right_panel_w = 346
+    @right_panel_h = 448
+    @sub_panel_w = 134
+    @sub_panel_h = 240         # маленькая панель
+
+    # Портрет и рамка (как в статусе, позиции те же)
+    @portrait_target_x = 48
+    @portrait_target_y = 16
+    @frame_target_x = 48
+    @frame_target_y = 16
+
+    @portrait_start_x = -220
+    @frame_start_x = -220
+
+    @portrait_x = @portrait_start_x
+    @portrait_y = @portrait_target_y
+    @frame_x = @frame_start_x
+    @frame_y = @frame_target_y
+
+    @portrait_tex = nil
+    @blink_tex = nil
+
+    load_textures
+  end
+
+  def load_textures
+    @right_panel_tex = Raylib.LoadTexture("assets/ui/right_panel.png")
+    @sub_panel_tex   = Raylib.LoadTexture("assets/ui/sub_panel.png")
+    @frame_tex       = Raylib.LoadTexture("assets/ui/portrait_frame.png")
+
+    Raylib.SetTextureFilter(@right_panel_tex, 0) if @right_panel_tex
+    Raylib.SetTextureFilter(@sub_panel_tex, 0)   if @sub_panel_tex
+    Raylib.SetTextureFilter(@frame_tex, 0)       if @frame_tex
+  end
+
+  def open(actor_name, party, class_names, classes_data, portrait_cache, start_inventory)
+    return if @visible
+    @visible = true
+    @anim_phase = 1
+    @ready_to_close = false
+	@current_actor = actor_name
+
+    # Сохраняем ссылки на данные
+    @party = party
+    @class_names = class_names
+    @classes_data = classes_data
+    @portrait_cache = portrait_cache
+    @start_inventory = start_inventory
+
+    # Загружаем портрет
+    actor = @party.find { |a| a["name"] == actor_name }
+    if actor
+      portrait_name = actor["portrait"] || actor["name"]
+      @portrait_tex = load_portrait(portrait_name)
+      @blink_tex = load_blink_portrait(portrait_name)
+    end
+
+    @blink_timer = 0
+    @blink_duration = 0
+    @blink_interval = 120
+
+    # Начальные позиции для анимации
+    @right_panel_x = @right_panel_start_x
+    @sub_panel_y = @sub_panel_start_y
+    @portrait_x = @portrait_start_x
+    @frame_x = @frame_start_x
+  end
+
+  def load_portrait(name)
+    return nil unless name
+    return @portrait_cache[name] if @portrait_cache.key?(name)
+
+    path = "assets/ui/portraits/#{name}.png"
+    return nil unless File.exist?(path)
+    img = Raylib.LoadImage(path)
+    tex = Raylib.LoadTextureFromImage(img)
+    Raylib.UnloadImage(img)
+    Raylib.SetTextureFilter(tex, 0)
+    @portrait_cache[name] = tex
+    tex
+  end
+
+  def load_blink_portrait(name)
+    return nil unless name
+    cache_key = "#{name}_blink"
+    return @portrait_cache[cache_key] if @portrait_cache.key?(cache_key)
+
+    path = "assets/ui/portraits/#{name}_blink.png"
+    return nil unless File.exist?(path)
+    img = Raylib.LoadImage(path)
+    tex = Raylib.LoadTextureFromImage(img)
+    Raylib.UnloadImage(img)
+    Raylib.SetTextureFilter(tex, 0)
+    @portrait_cache[cache_key] = tex
+    tex
+  end
+# def update Profile
+    def update
+    return unless @visible
+    speed = 38
+
+    case @anim_phase
+    when 1  # сборка
+      @portrait_x += speed
+      @portrait_x = @portrait_target_x if @portrait_x > @portrait_target_x
+      @frame_x += speed
+      @frame_x = @frame_target_x if @frame_x > @frame_target_x
+
+      @right_panel_x -= speed
+      @right_panel_x = @right_panel_target_x if @right_panel_x < @right_panel_target_x
+
+      @sub_panel_y -= speed
+      @sub_panel_y = @sub_panel_target_y if @sub_panel_y < @sub_panel_target_y
+
+      if @portrait_x >= @portrait_target_x &&
+         @frame_x >= @frame_target_x &&
+         @right_panel_x <= @right_panel_target_x &&
+         @sub_panel_y <= @sub_panel_target_y
+        @anim_phase = 2
+      end
+
+    when 3  # разборка
+      @portrait_x -= speed
+      @portrait_x = @portrait_start_x if @portrait_x < @portrait_start_x
+      @frame_x -= speed
+      @frame_x = @frame_start_x if @frame_x < @frame_start_x
+
+      @right_panel_x += speed
+      @right_panel_x = @right_panel_start_x if @right_panel_x > @right_panel_start_x
+
+      @sub_panel_y += speed
+      @sub_panel_y = @sub_panel_start_y if @sub_panel_y > @sub_panel_start_y
+
+      if @portrait_x <= @portrait_start_x
+        @visible = false
+        @anim_phase = 0
+        @ready_to_close = true
+      end
+    end
+
+    # Моргание (только когда полностью открыто)
+    if @anim_phase == 2
+      @blink_timer += 1
+      if @blink_duration > 0
+        @blink_duration -= 1
+      elsif @blink_timer >= @blink_interval
+        @blink_duration = 8
+        @blink_timer = 0
+        @blink_interval = 100 + rand(50)
+      end
+    end
+  end
+
+  def close
+    return unless @visible && @anim_phase == 2
+    @anim_phase = 3
+  end
+
+  def force_close
+    @visible = false
+    @anim_phase = 0
+  end
+
+  def draw
+    return unless @visible
+
+    origin = Raylib::Vector2.create(0, 0)
+
+    # Правая панель Profile
+    dst = Raylib::Rectangle.create(@right_panel_x, @right_panel_y, @right_panel_w, @right_panel_h)
+    src = Raylib::Rectangle.create(0, 0, @right_panel_w, @right_panel_h)
+    Raylib.DrawTexturePro(@right_panel_tex, src, dst, origin, 0, Raylib::WHITE)
+
+    # Маленькая панель под портретом Profile
+    dst = Raylib::Rectangle.create(@sub_panel_x, @sub_panel_y, @sub_panel_w, @sub_panel_h)
+    src = Raylib::Rectangle.create(0, 0, @sub_panel_w, @sub_panel_h)
+    Raylib.DrawTexturePro(@sub_panel_tex, src, dst, origin, 0, Raylib::WHITE)
+
+    # Портрет Profile
+    if @portrait_tex
+      portrait = (@blink_duration > 0 && @blink_tex) ? @blink_tex : @portrait_tex
+      dst = Raylib::Rectangle.create(@portrait_x + 2, @portrait_y + 2, 130, 204)
+      src = Raylib::Rectangle.create(0, 0, 134, 208)
+      Raylib.DrawTexturePro(portrait, src, dst, origin, 0, Raylib::WHITE)
+    end
+
+    # Рамка портрета Profile
+    dst = Raylib::Rectangle.create(@frame_x, @frame_y, 134, 208)
+    src = Raylib::Rectangle.create(0, 0, 134, 208)
+    Raylib.DrawTexturePro(@frame_tex, src, dst, origin, 0, Raylib::WHITE)
+
+    # ===== ТЕКСТ НА ПРАВОЙ ПАНЕЛИ =====
+    actor = @party.find { |a| a["name"] == @current_actor } if @current_actor
+    if actor
+      class_id = actor["class_id"]
+      class_name = @class_names[class_id] || "???"
+      level = actor["level"]
+      header = "#{actor["name"]}  #{class_name}  LV #{level}"
+      draw_text_custom(header, @right_panel_x + 25, @right_panel_y + 12, 20, WHITE)
+
+      # Здесь позже добавим детальные статы, предметы, резисты...
+      draw_text_custom("Подробная", @right_panel_x + 25, @right_panel_y + 42, 24, WHITE)
+      draw_text_custom("информация", @right_panel_x + 25, @right_panel_y + 72, 24, WHITE)
+    end
+
+    # На маленькой панели можно написать что-то вроде "Экипировка"
+    draw_text_custom("Equipment", @sub_panel_x + 10, @sub_panel_y + 10, 18, WHITE)
+  end
+
+  # Вспомогательный метод для текста
+  def draw_text_custom(text, x, y, size, color)
+    if @font
+      Raylib.DrawTextEx(@font, text, Raylib::Vector2.create(x, y), size, 1, color)
+    else
+      Raylib.DrawText(text, x, y, size, color)
     end
   end
 end
