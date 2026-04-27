@@ -114,6 +114,15 @@ class StatusOverlay
     nil
   end
 
+def find_actor_items(actor_name)
+  actor = @party.find { |a| a["name"] == actor_name }
+  return [] unless actor
+
+  entry = @start_inventory.find { |inv| inv["actor_id"] == actor["id"] }
+  return [] unless entry
+  entry["items"] || []
+end
+
   def initialize(font = nil)
     @font = font
     @visible = false
@@ -121,12 +130,29 @@ class StatusOverlay
     @anim_timer = 0
     @ready_to_close = false
 	
+    # Загружаем классы
+    @class_names = {}
+    @classes_data = []
+   if File.exist?("data/actors/classes.json")
+    data = JSON.parse(File.read("data/actors/classes.json"))
+    @classes_data = data["classes"] || []
+    @classes_data.each { |c| @class_names[c["id"]] = c["name"] }
+   end
+	
     # Загружаем заклинания
-    if File.exist?("data/spells.json")
-      data = JSON.parse(File.read("data/spells.json"))
-      @all_spells = data["spells"] || []
+    if File.exist?("data/actors/spells.json")
+     data = JSON.parse(File.read("data/actors/spells.json"))
+     @all_spells = data["spells"] || []
     else
       @all_spells = []
+    end
+	
+	# Загружаем начальный инвентарь
+    if File.exist?("data/actors/start_inventory.json")
+     data = JSON.parse(File.read("data/actors/start_inventory.json"))
+     @start_inventory = data["start_inventory"] || []
+    else
+     @start_inventory = []
     end
     
     # Целевые позиции
@@ -196,8 +222,8 @@ class StatusOverlay
   end
   
   def load_actors
-    if File.exist?("data/actors.json")
-      data = JSON.parse(File.read("data/actors.json"))
+    if File.exist?("data/actors/actors.json")
+      data = JSON.parse(File.read("data/actors/actors.json"))
       @party = data["actors"] || []
     else
       @party = []
@@ -254,12 +280,30 @@ class StatusOverlay
     @portrait_x = @portrait_start_x
     @frame_x = @frame_start_x
     
-    if @party.any?
-      @current_actor = @party[0]["name"]
-      @portrait_tex = load_portrait(@current_actor)
-      @blink_tex = load_blink_portrait(@current_actor)
+  if @party.any?
+    @current_actor = @party[0]["name"]
+
+    # Находим данные актора
+    actor = @party.find { |a| a["name"] == @current_actor }
+    if actor
+      # Ищем класс актора по class_id
+      klass = @classes_data.find { |c| c["id"] == actor["class_id"] }
+      spell_list = (klass && klass["spell_list"]) ? klass["spell_list"] : []
+      @current_spells = spell_list.select { |spell| spell["level"] <= actor["level"] }
+    else
+      @current_spells = []
     end
-    
+
+    # Предметы и портреты
+    @current_items = find_actor_items(@current_actor)
+    @portrait_tex = load_portrait(@current_actor)
+    @blink_tex = load_blink_portrait(@current_actor)
+  else
+    @current_actor = nil
+    @current_spells = []
+    @current_items = []
+  end
+ # таймеры
     @blink_timer = 0
     @blink_duration = 0
     @blink_interval = 120
@@ -370,21 +414,43 @@ class StatusOverlay
     Raylib.DrawTexturePro(@frame_tex, src, dst, origin, 0, Raylib::WHITE)
     
     # ===== ТЕКСТ (теперь через кастомный шрифт) =====
-    draw_text_custom("MUSHRA  MAGE  LV 18", @upper_x + 25, @upper_y + 12, 20, WHITE)
+    
+	actor_data = @party.find { |a| a["name"] == @current_actor }
+  if actor_data
+    class_id   = actor_data["class_id"]
+    class_name = @class_names[class_id] || "???"
+    level      = actor_data["level"]
+    header     = "#{actor_data["name"]}  #{class_name}  LV #{level}"
+    draw_text_custom(header, @upper_x + 25, @upper_y + 12, 20, WHITE)
+  else
+    draw_text_custom("NO DATA", @upper_x + 25, @upper_y + 12, 20, WHITE)
+  end
+	
     draw_text_custom("Магия", @upper_x + 25, @upper_y + 42, 24, WHITE)
     draw_text_custom("Предметы", @upper_x + 195, @upper_y + 38, 24, WHITE)
     
-    draw_text_custom("BLAZE Lv2", @upper_x + 25, @upper_y + 72, 20, WHITE)
-    draw_text_custom("MUDDLE Lv1", @upper_x + 25, @upper_y + 106, 20, WHITE)
-    draw_text_custom("DISPEL Lv1", @upper_x + 25, @upper_y + 140, 20, WHITE)
-    draw_text_custom("DESOUL Lv1", @upper_x + 25, @upper_y + 174, 20, WHITE)
+    # Магия из класса персонажа (только изученные заклинания)
+    if @current_spells && @current_spells.any?
+      @current_spells.each_with_index do |spell, i|
+        y = @upper_y + 72 + i * 34
+        draw_text_custom("#{spell["spell"]} Lv#{spell["spell_level"]}", @upper_x + 25, y, 20, WHITE)
+      end
+    end
     
-    # Предметы с переносом (как в Shining Force 2) тест
-	# обязательно заменить на реальные из базы данных игрока json !!!
-    draw_item_name("Medical Herb", @upper_x + 195, @upper_y + 64, 18, WHITE)
-    draw_item_name("Healing Seed", @upper_x + 195, @upper_y + 97, 18, WHITE)
-	draw_item_name("Medical Herb", @upper_x + 195, @upper_y + 130, 18, WHITE)
-	draw_item_name("Medical Herb", @upper_x + 195, @upper_y + 163, 18, WHITE)
+    # Предметы из start_inventory.json
+    if @current_items && @current_items.any?
+     @current_items.each_with_index do |item_entry, i|
+    next if item_entry["item"] == "NOTHING"
+
+     y = @upper_y + 64 + i * 33
+     draw_item_name(item_entry["item"], @upper_x + 195, y, 18, WHITE)
+
+     # Галочка/метка экипировки
+    if item_entry["equipped"]
+     draw_text_custom("E", @upper_x + 340, y, 18, YELLOW)   # или WHITE, можно жёлтым
+    end
+  end
+end
     
     # Нижняя панель — список партии
     @party.each_with_index do |member, i|
@@ -398,7 +464,10 @@ class StatusOverlay
       end
       
       draw_text_custom(member["name"], @lower_x + 44, y, 18, WHITE)
-      draw_text_custom(member["class"], @lower_x + 187, y, 18, WHITE)
+      
+	  class_name = @class_names[member["class_id"]] || "???"
+      draw_text_custom(class_name, @lower_x + 187, y, 18, WHITE)
+	  
       draw_text_custom(member["level"].to_s, @lower_x + 290, y, 18, WHITE)
       draw_text_custom(member["exp"].to_s, @lower_x + 395, y, 18, WHITE)
     end

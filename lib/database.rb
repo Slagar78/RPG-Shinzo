@@ -11,8 +11,8 @@ class Database
   end
   
   def load_data
-    if File.exist?("data/items.json")
-      data = JSON.parse(File.read("data/items.json"))
+    if File.exist?("data/actors/items.json")
+      data = JSON.parse(File.read("data/actors/items.json"))
       @items = data["items"].map { |h| OpenStruct.new(h) }
       puts "Загружено предметов: #{@items.size}"
     else

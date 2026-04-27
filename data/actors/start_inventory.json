@@ -1,0 +1,37 @@
+{
+  "start_inventory": [
+    {
+      "actor_id": 0,
+      "class": "SDMN",
+      "level": 1,
+      "items": [
+        { "item": "Short Sword", "equipped": true },
+        { "item": "Medical Herb", "equipped": false },
+        { "item": "NOTHING", "equipped": false },
+        { "item": "NOTHING", "equipped": false }
+      ]
+    },
+    {
+      "actor_id": 1,
+      "class": "PRST",
+      "level": 1,
+      "items": [
+        { "item": "Wooden Rod", "equipped": true },
+        { "item": "Medical Herb", "equipped": false },
+        { "item": "Medical Herb", "equipped": false },
+        { "item": "NOTHING", "equipped": false }
+      ]
+    },
+    {
+      "actor_id": 2,
+      "class": "KNTE",
+      "level": 1,
+      "items": [
+        { "item": "Short Spear", "equipped": true },
+        { "item": "Medical Herb", "equipped": false },
+        { "item": "NOTHING", "equipped": false },
+        { "item": "NOTHING", "equipped": false }
+      ]
+    }
+  ]
+}

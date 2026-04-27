@@ -47,8 +47,8 @@ class GameMap
     @mirror_x = data['mirror_x'] || Array.new(@width) { Array.new(@height, false) }
     @mirror_y = data['mirror_y'] || Array.new(@width) { Array.new(@height, false) }
 
-    if File.exist?("data/tile_types.json")
-      @tile_types = JSON.parse(File.read("data/tile_types.json"))
+    if File.exist?("data/tile_types/default.json")
+    @tile_types = JSON.parse(File.read("data/tile_types/default.json"))
     else
       @tile_types = []
     end

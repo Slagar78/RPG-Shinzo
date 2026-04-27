@@ -1,0 +1,50 @@
+{
+  "classes": [
+    {
+      "id": 0,
+      "name": "SDMN",
+      "full_name": "Swordsman",
+      "move": 6,
+      "move_type": "REGULAR",
+      "hp_growth": { "start": 12, "projected": 58, "curve": "LINEAR" },
+      "mp_growth": { "start": 8, "projected": 16, "curve": "EARLY" },
+      "attack_growth": { "start": 6, "projected": 40, "curve": "LINEAR" },
+      "defense_growth": { "start": 4, "projected": 36, "curve": "LINEAR" },
+      "agility_growth": { "start": 4, "projected": 32, "curve": "EARLY" },
+      "spell_list": [
+        { "level": 1, "spell": "EGRESS", "spell_level": 1 },
+        { "level": 22, "spell": "BOLT", "spell_level": 1 }
+      ]
+    },
+    {
+      "id": 1,
+      "name": "PRST",
+      "full_name": "Priest",
+      "move": 5,
+      "move_type": "HEALER",
+      "hp_growth": { "start": 11, "projected": 41, "curve": "LINEAR" },
+      "mp_growth": { "start": 10, "projected": 42, "curve": "EARLY" },
+      "attack_growth": { "start": 6, "projected": 26, "curve": "LINEAR" },
+      "defense_growth": { "start": 5, "projected": 25, "curve": "LINEAR" },
+      "agility_growth": { "start": 5, "projected": 31, "curve": "LINEAR" },
+      "spell_list": [
+        { "level": 1, "spell": "HEAL", "spell_level": 1 },
+        { "level": 4, "spell": "DETOX", "spell_level": 1 },
+        { "level": 7, "spell": "HEAL", "spell_level": 2 }
+      ]
+    },
+    {
+      "id": 2,
+      "name": "KNTE",
+      "full_name": "Knight",
+      "move": 7,
+      "move_type": "CENTAUR",
+      "hp_growth": { "start": 11, "projected": 59, "curve": "LATE" },
+      "mp_growth": { "start": 0, "projected": 0, "curve": "NONE" },
+      "attack_growth": { "start": 5, "projected": 35, "curve": "LINEAR" },
+      "defense_growth": { "start": 5, "projected": 35, "curve": "EARLYANDLATE" },
+      "agility_growth": { "start": 7, "projected": 35, "curve": "LINEAR" },
+      "spell_list": []
+    }
+  ]
+}
