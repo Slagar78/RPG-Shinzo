@@ -54,6 +54,15 @@
       "mapsprite": "hero",
       "level": 1,
       "exp": 0
+    },
+	{
+      "id": 6,
+      "name": "Bane",
+      "class_id": 4,
+	  "portrait": "Rusephina",
+      "mapsprite": "hero",
+      "level": 8,
+      "exp": 0
     }
   ]
 }

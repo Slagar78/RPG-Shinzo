@@ -607,17 +607,17 @@ end
           color
         )
       end
-
       # Стрелка вниз (на последней видимой строке, если есть скрытые снизу)
-      if i == VISIBLE_ROWS - 1 && @list_top_index + VISIBLE_ROWS < @party.length
-        alpha = (Math.sin(@selection_blink_timer * 0.2) * 0.4 + 0.6) * 255
-        color = Raylib.Fade(Raylib::WHITE, alpha / 255.0)
+      if i == VISIBLE_ROWS - 1
         ax = @lower_x + 27
         ay = y + 12
+        visible = (@list_top_index + VISIBLE_ROWS < @party.length)
+        alpha = visible ? ((Math.sin(@selection_blink_timer * 0.2) * 0.4 + 0.6) * 255).to_i : 0
+        color = Raylib.Fade(Raylib::WHITE, alpha / 255.0)
         Raylib.DrawTriangle(
-          Raylib::Vector2.create(ax, ay + 6),
-          Raylib::Vector2.create(ax - 6, ay - 4),
-          Raylib::Vector2.create(ax + 6, ay - 4),
+          Raylib::Vector2.create(ax - 6, ay - 4),  # левый верх
+          Raylib::Vector2.create(ax, ay + 6),       # вершина вниз
+          Raylib::Vector2.create(ax + 6, ay - 4),   # правый верх
           color
         )
       end
