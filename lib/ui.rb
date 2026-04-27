@@ -222,10 +222,12 @@ end
     @upper_tex = Raylib.LoadTexture("assets/ui/upper_panel.png")
     @lower_tex = Raylib.LoadTexture("assets/ui/lower_panel.png")
     @frame_tex = Raylib.LoadTexture("assets/ui/portrait_frame.png")
+	@ruby_tex = Raylib.LoadTexture("assets/ui/ruby_icon.png")
     
     Raylib.SetTextureFilter(@upper_tex, 0) if @upper_tex
     Raylib.SetTextureFilter(@lower_tex, 0) if @lower_tex
     Raylib.SetTextureFilter(@frame_tex, 0) if @frame_tex
+	Raylib.SetTextureFilter(@ruby_tex, 0) if @ruby_tex
   end
   
   def load_actors
@@ -474,12 +476,21 @@ end
     @party.each_with_index do |member, i|
       y = @lower_y + 71 + i * 34
 
-      # Подсветка выбранного персонажа
+      
+	  # Подсветка выбранного персонажа + рубин
       if member["name"] == @current_actor
         pulse = Math.sin(@selection_blink_timer * 0.2) * 0.4 + 0.6
         alpha = (pulse * 255).to_i
         highlight = Raylib.Fade(Raylib::BLUE, alpha / 255.0)
         Raylib.DrawRectangle(@lower_x + 38, y - 4, 138, 28, highlight)
+
+        # Рубин слева от имени (как в JS-версии)
+        if @ruby_tex
+          ruby_src = Raylib::Rectangle.create(0, 0, @ruby_tex.width, @ruby_tex.height)
+          ruby_dst = Raylib::Rectangle.create(@lower_x + 15, y - 3, 24, 24)
+          Raylib.DrawTexturePro(@ruby_tex, ruby_src, ruby_dst,
+                                Raylib::Vector2.create(0, 0), 0, Raylib::WHITE)
+        end
       end
 
       # Имя (обрезаем до 10 символов)
