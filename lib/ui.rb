@@ -572,7 +572,7 @@ end
     end
 
       # ===== НИЖНЯЯ ПАНЕЛЬ: СПИСОК ПАРТИИ (с прокруткой) =====
-      VISIBLE_ROWS.times do |i|
+    VISIBLE_ROWS.times do |i|
       list_index = @list_top_index + i
       break if list_index >= @party.length
       member = @party[list_index]
@@ -590,8 +590,36 @@ end
           ruby_src = Raylib::Rectangle.create(0, 0, @ruby_tex.width, @ruby_tex.height)
           ruby_dst = Raylib::Rectangle.create(@lower_x + 15, y - 3, 24, 24)
           Raylib.DrawTexturePro(@ruby_tex, ruby_src, ruby_dst,
-                                Raylib::Vector2.create(0, 0), 0, Raylib::WHITE)
+          Raylib::Vector2.create(0, 0), 0, Raylib::WHITE)
         end
+      end
+
+      # Стрелка вверх (на первой строке, если есть скрытые сверху)
+      if i == 0 && @list_top_index > 0
+        alpha = (Math.sin(@selection_blink_timer * 0.2) * 0.4 + 0.6) * 255
+        color = Raylib.Fade(Raylib::WHITE, alpha / 255.0)
+        ax = @lower_x + 27          # середина места рубина (15 + 24/2)
+        ay = y + 12                 # центр строки
+        Raylib.DrawTriangle(
+          Raylib::Vector2.create(ax, ay - 6),
+          Raylib::Vector2.create(ax - 6, ay + 4),
+          Raylib::Vector2.create(ax + 6, ay + 4),
+          color
+        )
+      end
+
+      # Стрелка вниз (на последней видимой строке, если есть скрытые снизу)
+      if i == VISIBLE_ROWS - 1 && @list_top_index + VISIBLE_ROWS < @party.length
+        alpha = (Math.sin(@selection_blink_timer * 0.2) * 0.4 + 0.6) * 255
+        color = Raylib.Fade(Raylib::WHITE, alpha / 255.0)
+        ax = @lower_x + 27
+        ay = y + 12
+        Raylib.DrawTriangle(
+          Raylib::Vector2.create(ax, ay + 6),
+          Raylib::Vector2.create(ax - 6, ay - 4),
+          Raylib::Vector2.create(ax + 6, ay - 4),
+          color
+        )
       end
 
       # Имя (обрезаем до 10 символов)
@@ -629,5 +657,5 @@ end
         end
       end
     end
-    end
- end
+  end
+end
