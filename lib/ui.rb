@@ -579,19 +579,20 @@ end
       y = @lower_y + 71 + i * 34
 
       # Подсветка выбранного персонажа
+            # Подсветка только для выбранного персонажа
       if member["name"] == @current_actor
         pulse = Math.sin(@selection_blink_timer * 0.2) * 0.4 + 0.6
         alpha = (pulse * 255).to_i
         highlight = Raylib.Fade(Raylib::BLUE, alpha / 255.0)
         Raylib.DrawRectangle(@lower_x + 38, y - 4, 138, 28, highlight)
+      end
 
-        # Рубин слева от имени
-        if @ruby_tex
-          ruby_src = Raylib::Rectangle.create(0, 0, @ruby_tex.width, @ruby_tex.height)
-          ruby_dst = Raylib::Rectangle.create(@lower_x + 15, y - 3, 24, 24)
-          Raylib.DrawTexturePro(@ruby_tex, ruby_src, ruby_dst,
-          Raylib::Vector2.create(0, 0), 0, Raylib::WHITE)
-        end
+      # Рубин для всех членов отряда
+      if @ruby_tex
+        ruby_src = Raylib::Rectangle.create(0, 0, @ruby_tex.width, @ruby_tex.height)
+        ruby_dst = Raylib::Rectangle.create(@lower_x + 15, y - 3, 24, 24)
+        Raylib.DrawTexturePro(@ruby_tex, ruby_src, ruby_dst,
+        Raylib::Vector2.create(0, 0), 0, Raylib::WHITE)
       end
 
       # Стрелка вверх (на первой строке, если есть скрытые сверху)
