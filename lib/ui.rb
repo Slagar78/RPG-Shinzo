@@ -679,6 +679,10 @@ class Profile
     @blink_interval = 120
 	@portrait_cache = {}
 	@icon_cache = {}
+	@mapsprite_cache = {}
+    @sprite_frame = 0
+    @sprite_timer = 0
+    @sprite_speed = 14   # кадров между сменой кадров
 
     # Позиции панелей
     @right_panel_target_x = 182      # правая панель на том же месте, где была верхняя в статусе
@@ -751,10 +755,15 @@ class Profile
       @portrait_tex = load_portrait(portrait_name)
       @blink_tex = load_blink_portrait(portrait_name)
     end
-
     @blink_timer = 0
     @blink_duration = 0
     @blink_interval = 120
+	@sprite_timer = 0
+    @sprite_frame = 0
+		
+	# Загружаем mapsprite для анимации в нижней панели
+    mapsprite_name = actor ? actor["mapsprite"] : nil
+    @mapsprite_tex = mapsprite_name ? load_mapsprite(mapsprite_name) : nil
 
     # Начальные позиции для анимации
     @right_panel_x = @right_panel_start_x
@@ -835,8 +844,8 @@ class Profile
       end
     end
 
-    # Моргание (только когда полностью открыто)
-    if @anim_phase == 2
+    # Моргание (только когда полностью открыто) Profile
+        if @anim_phase == 2
       @blink_timer += 1
       if @blink_duration > 0
         @blink_duration -= 1
@@ -844,6 +853,12 @@ class Profile
         @blink_duration = 8
         @blink_timer = 0
         @blink_interval = 100 + rand(50)
+      end
+      # Анимация спрайта (шаг вниз)
+      @sprite_timer += 1
+      if @sprite_timer >= @sprite_speed
+        @sprite_timer = 0
+        @sprite_frame = (@sprite_frame + 1) % 2
       end
     end
   end
@@ -891,11 +906,18 @@ class Profile
     if actor
       class_id = actor["class_id"]
       klass = @classes_data.find { |c| c["id"] == class_id }
+	  
       class_full_name = klass ? (klass["full_name"] || klass["name"]) : "???"
       class_full_name = class_full_name.slice(0, 16)
       actor_name = actor["name"].slice(0, 10)
-      header = "#{class_full_name} #{actor_name}"
-      draw_text_custom(header, @right_panel_x + 25, @right_panel_y + 12, 20, WHITE)
+
+      # Класс – платиновым (золотистым)
+      draw_text_custom(class_full_name, @right_panel_x + 25, @right_panel_y + 12, 20, GOLD)
+      class_width = Raylib.MeasureTextEx(@font, class_full_name, 20, 1).x
+      space_width = 12   # фиксированный отступ ≈ два пробела
+      name_x = @right_panel_x + 25 + class_width + space_width
+      # Имя – белым
+      draw_text_custom(actor_name, name_x, @right_panel_y + 12, 20, WHITE)
 
       # Статы персонажа (пока начальные, позже – по кривой роста)
       klass = @classes_data.find { |c| c["id"] == actor["class_id"] }
@@ -990,8 +1012,14 @@ class Profile
         end
       end
     end
-    # На маленькой панели можно написать что-то вроде "Экипировка"
-    draw_text_custom("Equipment", @sub_panel_x + 10, @sub_panel_y + 10, 18, WHITE)
+    # Анимированный спрайт персонажа
+    if @mapsprite_tex
+      src = Raylib::Rectangle.create(@sprite_frame * 48, 2 * 48, 48, 48)   # строка 2 = вниз
+      dst = Raylib::Rectangle.create(@sub_panel_x + (134 - 48) / 2, @sub_panel_y + 48, 48, 48)
+      Raylib.DrawTexturePro(@mapsprite_tex, src, dst,
+        Raylib::Vector2.create(0, 0), 0, Raylib::WHITE)
+    end
+    
   end
 # def draw_item_name Profile
 def draw_item_name(text, x, y, size, color)
@@ -1008,6 +1036,20 @@ def draw_item_name(text, x, y, size, color)
     else
       draw_text_custom(text, x, y, size, color)
     end
+  end
+  # Загрузка mapsprite на панели снизу портрета
+  def load_mapsprite(name)
+    return nil unless name
+    return @mapsprite_cache[name] if @mapsprite_cache.key?(name)
+
+    path = "assets/mapsprites/#{name}.png"
+    return nil unless File.exist?(path)
+    img = Raylib.LoadImage(path)
+    tex = Raylib.LoadTextureFromImage(img)
+    Raylib.UnloadImage(img)
+    Raylib.SetTextureFilter(tex, 0)
+    @mapsprite_cache[name] = tex
+    tex
   end
 
   # Загрузка иконки с кешем
