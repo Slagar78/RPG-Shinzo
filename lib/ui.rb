@@ -379,9 +379,12 @@ class StatusOverlay
     draw_text_custom("DISPEL Lv1", @upper_x + 25, @upper_y + 140, 20, WHITE)
     draw_text_custom("DESOUL Lv1", @upper_x + 25, @upper_y + 174, 20, WHITE)
     
-    # Предметы с переносом (как в Shining Force 2)
+    # Предметы с переносом (как в Shining Force 2) тест
+	# обязательно заменить на реальные из базы данных игрока json !!!
     draw_item_name("Medical Herb", @upper_x + 195, @upper_y + 64, 18, WHITE)
     draw_item_name("Healing Seed", @upper_x + 195, @upper_y + 97, 18, WHITE)
+	draw_item_name("Medical Herb", @upper_x + 195, @upper_y + 130, 18, WHITE)
+	draw_item_name("Medical Herb", @upper_x + 195, @upper_y + 163, 18, WHITE)
     
     # Нижняя панель — список партии
     @party.each_with_index do |member, i|

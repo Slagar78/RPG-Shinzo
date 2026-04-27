@@ -109,6 +109,9 @@ typedef struct {
 
 // Прототип
 Map* current_map(Editor *ed);
+void find_first_tileset_path(char *out, size_t out_len);
+void find_first_sound_path(char *out, size_t out_len);
+void get_relative_path(const char *abs_path, char *out, size_t out_len);
 
 // Безопасное копирование строк
 void safe_strcpy(char *dest, size_t dest_size, const char *src) {
@@ -203,22 +206,36 @@ void load_transform_icons(Editor *ed) { /* ... без изменений ... */
     }
 }
 
-void save_tile_types(const Editor *ed) { /* ... без изменений ... */
+void save_tile_types_for_tileset(const Editor *ed, const char *tileset_path) {
     if (!ed->tileset_loaded || !ed->tile_types) return;
+    char safe[256];
+    strncpy(safe, tileset_path, sizeof(safe));
+    for (char *p = safe; *p; p++)
+        if (*p == '\\' || *p == '/' || *p == ':') *p = '_';
+    CreateDirectoryA("data/tile_types", NULL);
+    char filepath[512];
+    snprintf(filepath, sizeof(filepath), "data/tile_types/%s.json", safe);
     cJSON *root = cJSON_CreateArray();
-    for (int i = 0; i < ed->tile_count; i++) cJSON_AddItemToArray(root, cJSON_CreateNumber(ed->tile_types[i]));
+    for (int i = 0; i < ed->tile_count; i++)
+        cJSON_AddItemToArray(root, cJSON_CreateNumber(ed->tile_types[i]));
     char *str = cJSON_Print(root);
-    FILE *f = fopen("data/tile_types.json", "w");
+    FILE *f = fopen(filepath, "w");
     if (f) { fputs(str, f); fclose(f); }
-    cJSON_Delete(root); free(str);
+    cJSON_Delete(root);
+    free(str);
 }
 
-void load_tile_types(Editor *ed) { /* ... без изменений ... */
+void load_tile_types_for_tileset(Editor *ed, const char *tileset_path) {
     if (!ed->tileset_loaded) return;
     if (ed->tile_types) { free(ed->tile_types); ed->tile_types = NULL; }
-    ed->tile_types = (int*)malloc(ed->tile_count * sizeof(int));
-    memset(ed->tile_types, 0, ed->tile_count * sizeof(int));
-    FILE *f = fopen("data/tile_types.json", "r");
+    ed->tile_types = (int*)calloc(ed->tile_count, sizeof(int));
+    char safe[256];
+    strncpy(safe, tileset_path, sizeof(safe));
+    for (char *p = safe; *p; p++)
+        if (*p == '\\' || *p == '/' || *p == ':') *p = '_';
+    char filepath[512];
+    snprintf(filepath, sizeof(filepath), "data/tile_types/%s.json", safe);
+    FILE *f = fopen(filepath, "r");
     if (!f) return;
     fseek(f, 0, SEEK_END); long len = ftell(f); fseek(f, 0, SEEK_SET);
     char *data = (char*)malloc(len+1);
@@ -269,11 +286,11 @@ int load_tileset(Editor *ed, const char *path) {
     }
 
     SDL_FreeSurface(surface);
-    safe_strcpy(ed->tileset_path, sizeof(ed->tileset_path), path);
+    get_relative_path(path, ed->tileset_path, sizeof(ed->tileset_path));
     ed->tileset_loaded = true;
     ed->palette_scroll = 0;
     ed->selected_tile = 0;
-    load_tile_types(ed);
+	load_tile_types_for_tileset(ed, path);
     return 1;
 }
 
@@ -331,7 +348,7 @@ bool map_load_from_json(Map *map, const char *filename) {
 
     map->width = w; map->height = h;
     safe_strcpy(map->name, sizeof(map->name), name_json->valuestring);
-    safe_strcpy(map->tileset_path, sizeof(map->tileset_path), tileset_json->valuestring);
+    get_relative_path(tileset_json->valuestring, map->tileset_path, sizeof(map->tileset_path));
 
     // Музыка
     cJSON *music_json = cJSON_GetObjectItem(root, "music");
@@ -394,6 +411,37 @@ void map_init(Map *map, const char *name, int w, int h, const char *tileset) {
 
 void map_free(Map *map) {
     free(map->tiles); free(map->rot); free(map->mirror_x); free(map->mirror_y);
+}
+
+void find_first_tileset_path(char *out, size_t out_len) {
+    out[0] = '\0';
+    WIN32_FIND_DATAA findData;
+    HANDLE hFind = FindFirstFileA("assets/tilesets/*.png", &findData);
+    if (hFind == INVALID_HANDLE_VALUE) return;
+    snprintf(out, out_len, "assets/tilesets/%s", findData.cFileName);
+    FindClose(hFind);
+}
+
+void get_relative_path(const char *abs_path, char *out, size_t out_len) {
+    const char *assets = strstr(abs_path, "assets");
+    if (assets) {
+        safe_strcpy(out, out_len, assets);
+    } else {
+        // fallback – только имя файла
+        const char *name = strrchr(abs_path, '\\');
+        if (!name) name = strrchr(abs_path, '/');
+        if (name) name++; else name = abs_path;
+        safe_strcpy(out, out_len, name);
+    }
+}
+
+void find_first_sound_path(char *out, size_t out_len) {
+    out[0] = '\0';
+    WIN32_FIND_DATAA findData;
+    HANDLE hFind = FindFirstFileA("assets/sounds/*.mp3", &findData);
+    if (hFind == INVALID_HANDLE_VALUE) return;
+    snprintf(out, out_len, "assets/sounds/%s", findData.cFileName);
+    FindClose(hFind);
 }
 
 void map_save_to_json(const Map *map, const char *filename) {
@@ -470,7 +518,7 @@ void load_map_list(Editor *ed) { /* ... без изменений ... */
     FindClose(hFind);
 }
 
-void create_map(Editor *ed, const char *name, int w, int h) { /* ... без изменений ... */
+void create_map(Editor *ed, const char *name, int w, int h, const char *tileset) {
     if (w < MIN_MAP_SIZE) w = MIN_MAP_SIZE; if (h < MIN_MAP_SIZE) h = MIN_MAP_SIZE;
     if (w > MAX_MAP_SIZE) w = MAX_MAP_SIZE; if (h > MAX_MAP_SIZE) h = MAX_MAP_SIZE;
 
@@ -487,7 +535,13 @@ void create_map(Editor *ed, const char *name, int w, int h) { /* ... без из
     }
 
     Map new_map;
-    map_init(&new_map, fullname, w, h, ed->tileset_path);
+    map_init(&new_map, fullname, w, h, tileset);
+	
+	char first_sound[256];
+    find_first_sound_path(first_sound, sizeof(first_sound));
+    if (first_sound[0] != '\0')
+    safe_strcpy(new_map.music_file, sizeof(new_map.music_file), first_sound);
+	
     char path[128]; snprintf(path, sizeof(path), "data/maps/%s.json", fullname);
     map_save_to_json(&new_map, path);
 
@@ -967,10 +1021,12 @@ void handle_dialog_click(Editor *ed, int mx, int my) {
                 delete_current_map(ed);
                 break;
             case DIALOG_NEW_MAP: {
-                int w = 20, h = 15;
-                sscanf(ed->input_text2, "%dx%d", &w, &h);
-                create_map(ed, ed->input_text, w, h);
-                break;
+            int w = 20, h = 15;
+            sscanf(ed->input_text2, "%dx%d", &w, &h);
+            char first_ts[256];
+            find_first_tileset_path(first_ts, sizeof(first_ts));
+            create_map(ed, ed->input_text, w, h, first_ts);
+            break;
             }
             case DIALOG_RENAME_MAP:
                 rename_current_map(ed, ed->input_text);
@@ -1118,7 +1174,17 @@ void handle_input(Editor *ed, bool *running) {
             int mx = e.button.x, my = e.button.y;
 
             if (mx < LEFT_PANEL_W) {
-                if (my >= 35 && my < 61) { char path[256]; if (open_file_dialog(path, sizeof(path))) load_tileset(ed, path); }
+                if (my >= 35 && my < 61) {
+                char path[256];
+                if (open_file_dialog(path, sizeof(path))) {
+                if (load_tileset(ed, path)) {
+                Map *cur = current_map(ed);
+                if (cur) {
+                get_relative_path(path, cur->tileset_path, sizeof(cur->tileset_path));
+            }
+        }
+    }
+}
                 else if (my >= 70 && my < 94) { int half = (LEFT_PANEL_W - 30)/2; if (mx >= 10 && mx < 10+half) ed->mode = MODE_A; else if (mx >= 10+half+10 && mx < 10+half+10+half) ed->mode = MODE_C; }
                 else if (ed->mode == MODE_C && my >= 100 && my < 124) { /* выбор типа */ int icon_y=100,sz=24,sp=6; int tw=4*sz+3*sp; int sx=(LEFT_PANEL_W-tw)/2; for(int t=0;t<4;t++){ SDL_Rect r={sx+t*(sz+sp),icon_y,sz,sz}; if(mx>=r.x&&mx<r.x+r.w&&my>=r.y&&my<r.y+r.h){ed->current_type=t;break;} } }
                 else if (ed->tileset_loaded && my >= PALETTE_START_Y && ed->mode == MODE_A) { /* выбор тайла */ int rx=mx-PALETTE_START_X,ry=my-PALETTE_START_Y; int step=PALETTE_TILE_SIZE+2; if(rx>=0&&ry>=0){int col=rx/step,row=ry/step+ed->palette_scroll; if(col<PALETTE_COLS&&rx%step<PALETTE_TILE_SIZE){int idx=row*PALETTE_COLS+col; if(idx>=0&&idx<ed->tile_count)ed->selected_tile=idx;}}}
@@ -1154,12 +1220,49 @@ void handle_input(Editor *ed, bool *running) {
                     }
                 }
                 int y = WINDOW_H - 180;   // новое начало кнопок
-                if (my >= y && my < y+24) { open_dialog(ed, DIALOG_NEW_MAP); strcpy(ed->input_text, "map00"); strcpy(ed->input_text2, "20x15"); }
-                else if (my >= y+30 && my < y+54) { /* Save */ if (current_map(ed)) { char path[128]; snprintf(path,sizeof(path),"data/maps/%s.json",current_map(ed)->name); map_save_to_json(current_map(ed), path); save_tile_types(ed); ed->save_blink_active = true; ed->save_blink_time = SDL_GetTicks(); } }
-                else if (my >= y+60 && my < y+84) { /* Delete */ if (ed->map_list.map_count > 1) { safe_strcpy(ed->input_text, sizeof(ed->input_text), current_map(ed)->name); open_dialog(ed, DIALOG_CONFIRM_DEL); } }
-                else if (my >= y+90 && my < y+114) { /* Rename */ safe_strcpy(ed->input_text, sizeof(ed->input_text), current_map(ed) ? current_map(ed)->name : ""); open_dialog(ed, DIALOG_RENAME_MAP); }
-                else if (my >= y+120 && my < y+144) { /* Resize */ if (current_map(ed)) { snprintf(ed->input_text, sizeof(ed->input_text), "%d", current_map(ed)->width); snprintf(ed->input_text2, sizeof(ed->input_text2), "%d", current_map(ed)->height); } open_dialog(ed, DIALOG_RESIZE_MAP); }
-                else if (my >= y+150 && my < y+174) { /* Set Music */ open_dialog(ed, DIALOG_MUSIC_MAP); }
+
+// New Map
+if (my >= y && my < y+24) {
+    open_dialog(ed, DIALOG_NEW_MAP);
+    strcpy(ed->input_text, "map00");
+    strcpy(ed->input_text2, "20x15");
+}
+// Save Map
+else if (my >= y+30 && my < y+54) {
+    if (current_map(ed)) {
+        char path[128];
+        snprintf(path, sizeof(path), "data/maps/%s.json", current_map(ed)->name);
+        map_save_to_json(current_map(ed), path);
+        save_tile_types_for_tileset(ed, current_map(ed)->tileset_path);  // <-- замена здесь
+        ed->save_blink_active = true;
+        ed->save_blink_time = SDL_GetTicks();
+    }
+}
+// Delete Map
+else if (my >= y+60 && my < y+84) {
+    if (ed->map_list.map_count > 1) {
+        safe_strcpy(ed->input_text, sizeof(ed->input_text), current_map(ed)->name);
+        open_dialog(ed, DIALOG_CONFIRM_DEL);
+    }
+}
+// Rename Map
+else if (my >= y+90 && my < y+114) {
+    safe_strcpy(ed->input_text, sizeof(ed->input_text),
+                current_map(ed) ? current_map(ed)->name : "");
+    open_dialog(ed, DIALOG_RENAME_MAP);
+}
+// Resize Map
+else if (my >= y+120 && my < y+144) {
+    if (current_map(ed)) {
+        snprintf(ed->input_text, sizeof(ed->input_text), "%d", current_map(ed)->width);
+        snprintf(ed->input_text2, sizeof(ed->input_text2), "%d", current_map(ed)->height);
+    }
+    open_dialog(ed, DIALOG_RESIZE_MAP);
+}
+// Set Music
+else if (my >= y+150 && my < y+174) {
+    open_dialog(ed, DIALOG_MUSIC_MAP);
+}
             }
         }
     }
@@ -1247,9 +1350,13 @@ int main(int argc, char *argv[]) {
 
     CreateDirectoryA("data/maps", NULL);
     load_map_list(&ed);
+	
     if (ed.map_list.map_count == 0) {
-        create_map(&ed, "map00", 20, 15);
-    } else {
+    char first_ts[256];
+    find_first_tileset_path(first_ts, sizeof(first_ts));
+    // если тайлсет не найден, путь останется пустым – это нормально
+    create_map(&ed, "map00", 20, 15, first_ts); }
+	else {
         Map *cur = current_map(&ed);
         if (cur) load_tileset(&ed, cur->tileset_path);
     }
@@ -1281,7 +1388,10 @@ int main(int argc, char *argv[]) {
         snprintf(path, sizeof(path), "data/maps/%s.json", current_map(&ed)->name);
         map_save_to_json(current_map(&ed), path);
     }
-    save_tile_types(&ed);
+    if (ed.tileset_loaded) {
+    save_tile_types_for_tileset(&ed,
+        current_map(&ed) ? current_map(&ed)->tileset_path : ed.tileset_path);
+    }
     free_tileset(&ed);
     TTF_CloseFont(ed.font);
     for (int i = 0; i < 4; i++) if (ed.type_icons[i]) SDL_DestroyTexture(ed.type_icons[i]);
