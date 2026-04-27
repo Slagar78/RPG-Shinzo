@@ -10,14 +10,14 @@
     {
       "id": 1,
       "name": "SARAH",
-      "class_id": 2,
+      "class_id": 1,
       "level": 1,
       "exp": 0
     },
     {
       "id": 2,
       "name": "CHESTER",
-      "class_id": 5,
+      "class_id": 2,
       "level": 1,
       "exp": 0
     }

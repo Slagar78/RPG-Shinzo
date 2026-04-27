@@ -197,6 +197,8 @@ end
     @blink_interval = 120
 	# Плавная пульсация рамки выбора
     @selection_blink_timer = 0
+	# Режим просмотра нижней панели: 0 = класс/уровень/опыт, 1 = статы
+    @status_view_mode = 0
     
     load_textures
     load_actors
@@ -330,10 +332,12 @@ end
   end
   
   def handle_input
-    return unless @visible && @anim_phase == 2
-    
-    if Raylib.IsKeyPressed(Raylib::KEY_A) || Raylib.IsKeyPressed(Raylib::KEY_D)
-      close
+  return unless @visible && @anim_phase == 2
+
+  if Raylib.IsKeyPressed(Raylib::KEY_A) || Raylib.IsKeyPressed(Raylib::KEY_D)
+    close
+  elsif Raylib.IsKeyPressed(Raylib::KEY_LEFT) || Raylib.IsKeyPressed(Raylib::KEY_RIGHT)
+    @status_view_mode = 1 - @status_view_mode
     end
   end
   
@@ -460,31 +464,44 @@ end
       end
     end
 
-    # ===== НИЖНЯЯ ПАНЕЛЬ: ЗАГОЛОВКИ =====
+        # ===== НИЖНЯЯ ПАНЕЛЬ: ЗАГОЛОВКИ =====
     header_y = @lower_y + 28
-    draw_text_custom("Имя",    @lower_x + 44,  header_y, 20, WHITE)
-    draw_text_custom("Класс",  @lower_x + 187, header_y, 20, WHITE)
 
-    # Центры для уровня и опыта (вычисляем один раз)
-    level_header_center_x = @lower_x + 290 + Raylib.MeasureTextEx(@font, "Уровень", 20, 1).x / 2
-    exp_header_center_x   = @lower_x + 395 + Raylib.MeasureTextEx(@font, "Опыт", 20, 1).x / 2
+    if @status_view_mode == 0
+      # Режим 0: Имя, Класс, Уровень, Опыт
+      draw_text_custom("Имя",    @lower_x + 44,  header_y, 20, WHITE)
+      draw_text_custom("Класс",  @lower_x + 187, header_y, 20, WHITE)
 
-    draw_text_custom("Уровень", @lower_x + 290, header_y, 20, WHITE)
-    draw_text_custom("Опыт",    @lower_x + 395, header_y, 20, WHITE)
+      level_header_center_x = @lower_x + 290 + Raylib.MeasureTextEx(@font, "Уровень", 20, 1).x / 2
+      exp_header_center_x   = @lower_x + 395 + Raylib.MeasureTextEx(@font, "Опыт", 20, 1).x / 2
+
+      draw_text_custom("Уровень", @lower_x + 290, header_y, 20, WHITE)
+      draw_text_custom("Опыт",    @lower_x + 395, header_y, 20, WHITE)
+    else
+      # Режим 1: Статистика (HP, MP, AT, DF, AGI, MV)
+	  draw_text_custom("Имя", @lower_x + 44, header_y, 20, WHITE)
+      stat_headers = ["HP", "MP", "AT", "DF", "AGI", "MV"]
+      # Центры колонок (примерно соответствуют прежним Уровень/Опыт + дополнительные)
+      stat_centers = [@lower_x + 200, @lower_x + 250, @lower_x + 300, @lower_x + 350, @lower_x + 400, @lower_x + 445]
+      stat_headers.each_with_index do |head, idx|
+        cx = stat_centers[idx]
+        w = Raylib.MeasureTextEx(@font, head, 20, 1).x
+        draw_text_custom(head, cx - w / 2, header_y, 20, WHITE)
+      end
+    end
 
     # ===== НИЖНЯЯ ПАНЕЛЬ: СПИСОК ПАРТИИ =====
     @party.each_with_index do |member, i|
       y = @lower_y + 71 + i * 34
 
-      
-	  # Подсветка выбранного персонажа + рубин
+      # Подсветка выбранного персонажа
       if member["name"] == @current_actor
         pulse = Math.sin(@selection_blink_timer * 0.2) * 0.4 + 0.6
         alpha = (pulse * 255).to_i
         highlight = Raylib.Fade(Raylib::BLUE, alpha / 255.0)
         Raylib.DrawRectangle(@lower_x + 38, y - 4, 138, 28, highlight)
 
-        # Рубин слева от имени (как в JS-версии)
+        # Рубин слева от имени
         if @ruby_tex
           ruby_src = Raylib::Rectangle.create(0, 0, @ruby_tex.width, @ruby_tex.height)
           ruby_dst = Raylib::Rectangle.create(@lower_x + 15, y - 3, 24, 24)
@@ -497,14 +514,36 @@ end
       name_display = member["name"].slice(0, 10)
       draw_text_custom(name_display, @lower_x + 44, y, 18, WHITE)
 
-      # Класс (обрезаем до 10 символов)
-      class_name = @class_names[member["class_id"]] || "???"
-      class_display = class_name.slice(0, 10)
-      draw_text_custom(class_display, @lower_x + 187, y, 18, WHITE)
+      if @status_view_mode == 0
+        # Класс (обрезаем до 10 символов)
+        class_name = @class_names[member["class_id"]] || "???"
+        class_display = class_name.slice(0, 10)
+        draw_text_custom(class_display, @lower_x + 187, y, 18, WHITE)
 
-      # Уровень и опыт (центрированы)
-      draw_text_centered_h(member["level"].to_s, level_header_center_x, y, 18, WHITE)
-      draw_text_centered_h(member["exp"].to_s,    exp_header_center_x,   y, 18, WHITE)
+        # Уровень и опыт (центрированы)
+        draw_text_centered_h(member["level"].to_s, level_header_center_x, y, 18, WHITE)
+        draw_text_centered_h(member["exp"].to_s,    exp_header_center_x,   y, 18, WHITE)
+      else
+        # Статы персонажа (пока берём начальные значения из класса)
+        klass = @classes_data.find { |c| c["id"] == member["class_id"] }
+        if klass
+          hp_start  = klass.dig("hp_growth", "start") || 0
+          mp_start  = klass.dig("mp_growth", "start") || 0
+          atk_start = klass.dig("attack_growth", "start") || 0
+          def_start = klass.dig("defense_growth", "start") || 0
+          agi_start = klass.dig("agility_growth", "start") || 0
+          mov       = klass["move"] || 0
+        else
+          hp_start = mp_start = atk_start = def_start = agi_start = mov = 0
+        end
+
+        stat_values = [hp_start, mp_start, atk_start, def_start, agi_start, mov]
+        stat_centers = [@lower_x + 200, @lower_x + 250, @lower_x + 300, @lower_x + 350, @lower_x + 400, @lower_x + 445]
+        stat_values.each_with_index do |val, idx|
+          cx = stat_centers[idx]
+          draw_text_centered_h(val.to_s, cx, y, 18, WHITE)
+          end
+        end
+      end
     end
-  end
-end
+ end
