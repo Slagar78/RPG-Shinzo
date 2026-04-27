@@ -678,6 +678,7 @@ class Profile
     @blink_duration = 0
     @blink_interval = 120
 	@portrait_cache = {}
+	@icon_cache = {}
 
     # Позиции панелей
     @right_panel_target_x = 182      # правая панель на том же месте, где была верхняя в статусе
@@ -886,21 +887,150 @@ class Profile
     Raylib.DrawTexturePro(@frame_tex, src, dst, origin, 0, Raylib::WHITE)
 
     # ===== ТЕКСТ НА ПРАВОЙ ПАНЕЛИ =====
-    actor = @party.find { |a| a["name"] == @current_actor } if @current_actor
+      actor = @party.find { |a| a["name"] == @current_actor } if @current_actor
     if actor
       class_id = actor["class_id"]
-      class_name = @class_names[class_id] || "???"
-      level = actor["level"]
-      header = "#{actor["name"]}  #{class_name}  LV #{level}"
+      klass = @classes_data.find { |c| c["id"] == class_id }
+      class_full_name = klass ? (klass["full_name"] || klass["name"]) : "???"
+      class_full_name = class_full_name.slice(0, 16)
+      actor_name = actor["name"].slice(0, 10)
+      header = "#{class_full_name} #{actor_name}"
       draw_text_custom(header, @right_panel_x + 25, @right_panel_y + 12, 20, WHITE)
 
-      # Здесь позже добавим детальные статы, предметы, резисты...
-      draw_text_custom("Подробная", @right_panel_x + 25, @right_panel_y + 42, 24, WHITE)
-      draw_text_custom("информация", @right_panel_x + 25, @right_panel_y + 72, 24, WHITE)
-    end
+      # Статы персонажа (пока начальные, позже – по кривой роста)
+      klass = @classes_data.find { |c| c["id"] == actor["class_id"] }
+      if klass
+        hp_start  = klass.dig("hp_growth", "start") || 0
+        mp_start  = klass.dig("mp_growth", "start") || 0
+        atk_start = klass.dig("attack_growth", "start") || 0
+        def_start = klass.dig("defense_growth", "start") || 0
+        agi_start = klass.dig("agility_growth", "start") || 0
+        mov       = klass["move"] || 0
+      else
+        hp_start = mp_start = atk_start = def_start = agi_start = mov = 0
+      end
 
+      lv = actor["level"]
+      exp = actor["exp"] || 0
+
+      # Статы (шрифт 22, интервал 32)
+      left_x = @right_panel_x + 55
+      right_x = @right_panel_x + 210
+      y_base = @right_panel_y + 55
+      line_h = 32
+
+      # Левый столбец
+      draw_text_custom("LV    #{lv}", left_x, y_base, 22, WHITE)
+      draw_text_custom("HP    #{hp_start}", left_x, y_base + line_h, 22, WHITE)
+      draw_text_custom("MP    #{mp_start}", left_x, y_base + line_h * 2, 22, WHITE)
+      draw_text_custom("EXP   #{exp}", left_x, y_base + line_h * 3, 22, WHITE)
+
+      # Правый столбец
+      draw_text_custom("ATT   #{atk_start}", right_x, y_base, 22, WHITE)
+      draw_text_custom("DEF   #{def_start}", right_x, y_base + line_h, 22, WHITE)
+      draw_text_custom("AGI   #{agi_start}", right_x, y_base + line_h * 2, 22, WHITE)
+      draw_text_custom("MOV   #{mov}", right_x, y_base + line_h * 3, 22, WHITE)
+	  	  
+	        # Получаем заклинания
+      klass = @classes_data.find { |c| c["id"] == actor["class_id"] }
+      spell_list = (klass && klass["spell_list"]) ? klass["spell_list"] : []
+      spells = spell_list.select { |s| s["level"] <= actor["level"] }
+
+            # ── Магия (слева) и Предметы (справа) ──
+      section_y = @right_panel_y + 200
+      draw_text_custom("Magic", left_x - 30, section_y, 20, WHITE)
+      draw_text_custom("Items", right_x - 50, section_y, 20, WHITE)
+
+      # Магия (левый столбец)
+      if spells.any?
+        spells.first(4).each_with_index do |spell, i|
+          y = section_y + 30 + i * 52
+          # Иконка 32x48
+          spell_icon = load_icon(spell["icon"])
+          if spell_icon
+            src = Raylib::Rectangle.create(0, 0, 32, 48)
+            dst = Raylib::Rectangle.create(left_x - 30, y, 32, 48)
+            Raylib.DrawTexturePro(spell_icon, src, dst,
+              Raylib::Vector2.create(0, 0), 0, Raylib::WHITE)
+          end
+          draw_text_custom("#{spell["spell"]} Lv#{spell["spell_level"]}", left_x + 10, y + 12, 18, WHITE)
+        end
+      else
+        draw_text_custom("Nothing", left_x, section_y + 30, 18, ORANGE)
+      end
+
+      # Предметы (правый столбец)
+      inv_entry = @start_inventory.find { |inv| inv["actor_id"] == actor["id"] }
+      items = inv_entry ? inv_entry["items"] : []
+
+      if items.empty?
+        draw_text_custom("Nothing", right_x - 50, section_y + 30, 18, ORANGE)
+      else
+        items.first(4).each_with_index do |item_entry, i|
+          next if item_entry["item"] == "NOTHING"
+          y = section_y + 30 + i * 52
+          # Иконка 32x48
+          item_data = find_item_by_name(item_entry["item"])
+          item_icon = item_data ? load_icon(item_data["icon"]) : nil
+          if item_icon
+            src = Raylib::Rectangle.create(0, 0, 32, 48)
+            dst = Raylib::Rectangle.create(right_x - 50, y, 32, 48)
+            Raylib.DrawTexturePro(item_icon, src, dst,
+              Raylib::Vector2.create(0, 0), 0, Raylib::WHITE)
+          end
+          name = item_entry["item"]
+          prefix = item_entry["equipped"] ? "E " : ""
+          draw_item_name(prefix + name, right_x - 10, y + 12, 18, WHITE)
+        end
+      end
+    end
     # На маленькой панели можно написать что-то вроде "Экипировка"
     draw_text_custom("Equipment", @sub_panel_x + 10, @sub_panel_y + 10, 18, WHITE)
+  end
+# def draw_item_name Profile
+def draw_item_name(text, x, y, size, color)
+    if text.include?(' ')
+      # Разбиваем на два слова по первому пробелу
+      first_word = text[0...text.index(' ')].strip
+      second_word = text[text.index(' ') + 1..-1].strip
+
+      # Первая строка — как обычно
+      draw_text_custom(first_word, x, y, size, color)
+
+      # Вторая строка — смещена вниз (как в JS: itemSplitOffset = 15) и вправо (secondLineIndent = 14)
+      draw_text_custom(second_word, x + 14, y + 15, size, color)
+    else
+      draw_text_custom(text, x, y, size, color)
+    end
+  end
+
+  # Загрузка иконки с кешем
+  def load_icon(path)
+    return nil unless path && !path.empty?
+    return @icon_cache[path] if @icon_cache.key?(path)
+
+    tex = nil
+    if File.exist?(path)
+      img = Raylib.LoadImage(path)
+      tex = Raylib.LoadTextureFromImage(img)
+      Raylib.UnloadImage(img)
+      Raylib.SetTextureFilter(tex, 0)
+    end
+    @icon_cache[path] = tex
+    tex
+  end
+
+  # Найти предмет по имени в items.json
+  def find_item_by_name(name)
+    unless @items_data
+      if File.exist?("data/actors/items.json")
+        data = JSON.parse(File.read("data/actors/items.json"))
+        @items_data = data["items"] || []
+      else
+        @items_data = []
+      end
+    end
+    @items_data.find { |item| item["name"] == name }
   end
 
   # Вспомогательный метод для текста

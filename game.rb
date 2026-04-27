@@ -151,7 +151,6 @@ class Game
 
     # ── Нижнее меню (4 плитки) ─────────────────
     @menu = BottomMenu.new
-	@profile = Profile.new(@font)
 
     # ── Загрузка шрифта с поддержкой кириллицы ──
     codepoints = []
@@ -169,6 +168,7 @@ class Game
 
     # ── Статусный оверлей (с кастомным шрифтом) ─
     @status_overlay = StatusOverlay.new(@font)
+	@profile = Profile.new(@font)
 
     # ── Состояние игры ──────────────────────────
     @game_state = :playing

@@ -7,8 +7,8 @@
       "items": [
         { "item": "Short Sword", "equipped": true },
         { "item": "Medical Herb", "equipped": true },
-        { "item": "NOTHING", "equipped": false },
-        { "item": "NOTHING", "equipped": false }
+        { "item": "Medical Herb", "equipped": false },
+        { "item": "Medical Herb", "equipped": false }
       ]
     },
     {

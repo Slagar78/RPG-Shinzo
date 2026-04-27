@@ -8,6 +8,7 @@
       "range": [0, 1],
       "use_spell": "HEALIN",
       "spell_level": 1,
+      "icon": "assets/items/Medical_Herb.png",
       "description": "Восстанавливает 10 HP"
     },
     {
@@ -18,6 +19,7 @@
       "range": [0, 1],
       "use_spell": "HEALIN",
       "spell_level": 2,
+      "icon": "assets/items/Healing_Seed.png",
       "description": "Восстанавливает 20 HP"
     },
     {
@@ -28,6 +30,7 @@
       "range": [0, 1],
       "use_spell": "HEALIN",
       "spell_level": 3,
+      "icon": "assets/items/Healing_Drop.png",
       "description": "Восстанавливает 40 HP"
     },
     {
@@ -38,6 +41,7 @@
       "range": [0, 1],
       "use_spell": "DETOX",
       "spell_level": 1,
+      "icon": "assets/items/Antidote.png",
       "description": "Снимает отравление"
     },
     {
@@ -48,184 +52,8 @@
       "range": [0, 0],
       "use_spell": "EGRESS",
       "spell_level": 1,
+      "icon": "assets/items/Angel_Wing.png",
       "description": "Выход из битвы"
-    },
-    {
-      "id": 5,
-      "name": "Fairy Powder",
-      "category": "consumable",
-      "price": 100,
-      "range": [0, 1],
-      "use_spell": "POWDER",
-      "spell_level": 2,
-      "description": "Снимает проклятие"
-    },
-    {
-      "id": 6,
-      "name": "Healing Water",
-      "category": "consumable",
-      "price": 400,
-      "range": [0, 1],
-      "use_spell": "HEAL",
-      "spell_level": 4,
-      "description": "Восстанавливает 80 HP"
-    },
-    {
-      "id": 7,
-      "name": "Fairy Tear",
-      "category": "consumable",
-      "price": 300,
-      "range": [0, 1],
-      "use_spell": "G_TEAR",
-      "spell_level": 2,
-      "description": "Восстанавливает 15 MP"
-    },
-    {
-      "id": 8,
-      "name": "Healing Rain",
-      "category": "consumable",
-      "price": 10000,
-      "range": [0, 0],
-      "use_spell": "AURA",
-      "spell_level": 4,
-      "description": "Лечит всех союзников"
-    },
-    {
-      "id": 9,
-      "name": "Power Water",
-      "category": "consumable",
-      "price": 500,
-      "range": [0, 0],
-      "use_spell": "POWER",
-      "spell_level": 1,
-      "description": "Увеличивает атаку (+5)"
-    },
-    {
-      "id": 10,
-      "name": "Protect Milk",
-      "category": "consumable",
-      "price": 500,
-      "range": [0, 0],
-      "use_spell": "GUARD",
-      "spell_level": 1,
-      "description": "Увеличивает защиту (+5)"
-    },
-    {
-      "id": 11,
-      "name": "Quick Chicken",
-      "category": "consumable",
-      "price": 500,
-      "range": [0, 0],
-      "use_spell": "SPEED",
-      "spell_level": 1,
-      "description": "Увеличивает ловкость (+5)"
-    },
-    {
-      "id": 12,
-      "name": "Running Pimento",
-      "category": "consumable",
-      "price": 1500,
-      "range": [0, 0],
-      "use_spell": "IDATEN",
-      "spell_level": 1,
-      "description": "Увеличивает движение (+2)"
-    },
-    {
-      "id": 13,
-      "name": "Cheerful Bread",
-      "category": "consumable",
-      "price": 500,
-      "range": [0, 0],
-      "use_spell": "HEALTH",
-      "spell_level": 1,
-      "description": "Увеличивает HP (+4)"
-    },
-    {
-      "id": 14,
-      "name": "Bright Honey",
-      "category": "consumable",
-      "price": 500,
-      "range": [0, 0],
-      "use_spell": "HANNY",
-      "spell_level": 1,
-      "description": "Увеличивает MP (+2)"
-    },
-    {
-      "id": 15,
-      "name": "Brave Apple",
-      "category": "consumable",
-      "price": 500,
-      "range": [0, 0],
-      "use_spell": "BRAVE",
-      "spell_level": 1,
-      "description": "Даёт опыт (+1 уровень)"
-    },
-    {
-      "id": 19,
-      "name": "Power Ring",
-      "category": "ring",
-      "price": 3000,
-      "equip_flags": ["ALL"],
-      "use_spell": "ATTACK",
-      "spell_level": 1,
-      "effects": [
-        { "type": "increase_attack", "value": 5 }
-      ],
-      "description": "Кольцо +5 к атаке, можно использовать ATTACK"
-    },
-    {
-      "id": 20,
-      "name": "Protect Ring",
-      "category": "ring",
-      "price": 3000,
-      "equip_flags": ["ALL"],
-      "use_spell": "BOOST",
-      "spell_level": 1,
-      "effects": [
-        { "type": "increase_defense", "value": 5 }
-      ],
-      "description": "Кольцо +5 к защите, можно использовать BOOST"
-    },
-    {
-      "id": 22,
-      "name": "Running Ring",
-      "category": "ring",
-      "price": 3000,
-      "equip_flags": ["ALL"],
-      "effects": [
-        { "type": "increase_movement", "value": 2 }
-      ],
-      "description": "Кольцо +2 к движению"
-    },
-    {
-      "id": 57,
-      "name": "Short Sword",
-      "category": "weapon",
-      "price": 140,
-      "attack": 5,
-      "range": [1, 1],
-      "equip_flags": ["SDMN", "BDMN", "HERO", "BRN", "BDBT", "NINJ"],
-      "description": "Короткий меч"
-    },
-    {
-      "id": 72,
-      "name": "Short Spear",
-      "category": "weapon",
-      "price": 120,
-      "attack": 6,
-      "range": [1, 2],
-      "equip_flags": ["KNTE", "PLDN", "PGNT"],
-      "description": "Короткое копьё (бьёт с 1-2 клеток)"
-    },
-    {
-      "id": 85,
-      "name": "Wooden Rod",
-      "category": "weapon",
-      "price": 60,
-      "attack": 3,
-      "range": [1, 1],
-      "equip_flags": ["MAGE", "PRST", "WIZ", "SORC", "VICR"],
-      "description": "Деревянный посох"
     }
   ]
 }
