@@ -9,7 +9,7 @@
       "range": [0, 1],
       "radius": 0,
       "power": 15,
-      "icon": "assets/spell/Heal.png"
+      "icon": "assets/spell/Aura.png"
     },
     {
       "id": 1,

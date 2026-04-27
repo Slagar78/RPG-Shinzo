@@ -946,20 +946,22 @@ class Profile
         spells.first(4).each_with_index do |spell, i|
           y = section_y + 30 + i * 52
           # Иконка 32x48
-          spell_icon = load_icon(spell["icon"])
+          spell_icon = load_icon(find_spell_icon(spell["spell"], spell["spell_level"]))
           if spell_icon
             src = Raylib::Rectangle.create(0, 0, 32, 48)
             dst = Raylib::Rectangle.create(left_x - 30, y, 32, 48)
             Raylib.DrawTexturePro(spell_icon, src, dst,
               Raylib::Vector2.create(0, 0), 0, Raylib::WHITE)
           end
-          draw_text_custom("#{spell["spell"]} Lv#{spell["spell_level"]}", left_x + 10, y + 12, 18, WHITE)
+		  
+          draw_text_custom(spell["spell"], left_x + 10, y + 6, 18, WHITE)
+          draw_text_custom("Lv #{spell["spell_level"]}", left_x + 10, y + 26, 18, WHITE)
         end
       else
         draw_text_custom("Nothing", left_x, section_y + 30, 18, ORANGE)
       end
 
-      # Предметы (правый столбец)
+            # Предметы (правый столбец)
       inv_entry = @start_inventory.find { |inv| inv["actor_id"] == actor["id"] }
       items = inv_entry ? inv_entry["items"] : []
 
@@ -969,6 +971,7 @@ class Profile
         items.first(4).each_with_index do |item_entry, i|
           next if item_entry["item"] == "NOTHING"
           y = section_y + 30 + i * 52
+
           # Иконка 32x48
           item_data = find_item_by_name(item_entry["item"])
           item_icon = item_data ? load_icon(item_data["icon"]) : nil
@@ -978,9 +981,12 @@ class Profile
             Raylib.DrawTexturePro(item_icon, src, dst,
               Raylib::Vector2.create(0, 0), 0, Raylib::WHITE)
           end
+
           name = item_entry["item"]
-          prefix = item_entry["equipped"] ? "E " : ""
-          draw_item_name(prefix + name, right_x - 10, y + 12, 18, WHITE)
+          if item_entry["equipped"]
+            draw_text_custom("E", right_x - 15, y + 12, 18, YELLOW)   # жёлтая метка
+          end
+          draw_item_name(name, right_x + 5, y + 12, 18, WHITE)       # название без префикса
         end
       end
     end
@@ -1031,6 +1037,20 @@ def draw_item_name(text, x, y, size, color)
       end
     end
     @items_data.find { |item| item["name"] == name }
+  end
+
+  # Найти иконку заклинания по имени и уровню в spells.json
+  def find_spell_icon(name, level)
+    unless @spells_data
+      if File.exist?("data/actors/spells.json")
+        data = JSON.parse(File.read("data/actors/spells.json"))
+        @spells_data = data["spells"] || []
+      else
+        @spells_data = []
+      end
+    end
+    spell = @spells_data.find { |s| s["name"].casecmp?(name) && s["level"] == level }
+    spell ? spell["icon"] : nil
   end
 
   # Вспомогательный метод для текста
