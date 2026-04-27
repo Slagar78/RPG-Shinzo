@@ -233,8 +233,8 @@ class Game
     @status_overlay.update if @game_state == :status
 
     if @game_state == :playing
-      target_x = @player.x * @game_map.tile_size + @game_map.tile_size / 2
-      target_y = @player.y * @game_map.tile_size + @game_map.tile_size / 2
+      target_x = @player.visual_x + @game_map.tile_size / 2.0
+      target_y = @player.visual_y + @game_map.tile_size / 2.0
 
       half_w = 288
       half_h = 240
@@ -246,10 +246,10 @@ class Game
 
       cam_x = @camera.target.x
       cam_y = @camera.target.y
-      smooth = 0.09
+      smooth = 0.15
       cam_x = lerp(cam_x, target_x, smooth)
       cam_y = lerp(cam_y, target_y, smooth)
-      @camera.target = Vector2.create(cam_x.round, cam_y.round)
+      @camera.target = Vector2.create(cam_x, cam_y)   # без round!
     end
   end
 

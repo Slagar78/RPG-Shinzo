@@ -58,8 +58,8 @@
 	{
       "id": 6,
       "name": "Bane",
-      "class_id": 4,
-	  "portrait": "Rusephina",
+      "class_id": 6,
+	  "portrait": "Saago",
       "mapsprite": "hero",
       "level": 8,
       "exp": 0

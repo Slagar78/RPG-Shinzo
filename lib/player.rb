@@ -177,4 +177,18 @@ def draw
 
     DrawTexturePro(texture, src, dst, Vector2.create(0, 0), 0, WHITE)
 end
+
+  def visual_x
+    px = @x * TILE_SIZE
+    px += @move_offset * TILE_SIZE if @moving && @move_dir == DIR_RIGHT
+    px -= @move_offset * TILE_SIZE if @moving && @move_dir == DIR_LEFT
+    px
+  end
+
+  def visual_y
+    py = @y * TILE_SIZE
+    py += @move_offset * TILE_SIZE if @moving && @move_dir == DIR_DOWN
+    py -= @move_offset * TILE_SIZE if @moving && @move_dir == DIR_UP
+    py
+  end
 end
