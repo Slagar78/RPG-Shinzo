@@ -123,6 +123,38 @@ def find_actor_items(actor_name)
   entry["items"] || []
 end
 
+def change_selected_actor(delta)
+  return unless @party.any?
+  new_index = @selected_actor_index + delta
+  return if new_index < 0 || new_index >= @party.length
+
+  @selected_actor_index = new_index
+
+  # Автоскролл (как в JS)
+  if @selected_actor_index < @list_top_index
+    @list_top_index = @selected_actor_index
+  elsif @selected_actor_index >= @list_top_index + VISIBLE_ROWS
+    @list_top_index = @selected_actor_index - VISIBLE_ROWS + 1
+  end
+
+  # Обновляем текущего персонажа
+  @current_actor = @party[@selected_actor_index]["name"]
+  @current_items = find_actor_items(@current_actor)
+  actor = @party[@selected_actor_index]
+  portrait_name = actor ? (actor["portrait"] || actor["name"]) : @current_actor
+  @portrait_tex = load_portrait(portrait_name)
+  @blink_tex = load_blink_portrait(portrait_name)
+
+  # Обновляем заклинания
+  actor = @party[@selected_actor_index]
+  if actor
+    klass = @classes_data.find { |c| c["id"] == actor["class_id"] }
+    spell_list = (klass && klass["spell_list"]) ? klass["spell_list"] : []
+    @current_spells = spell_list.select { |spell| spell["level"] <= actor["level"] }
+  end
+end
+
+  VISIBLE_ROWS = 5
   def initialize(font = nil)
     @font = font
     @visible = false
@@ -199,6 +231,8 @@ end
     @selection_blink_timer = 0
 	# Режим просмотра нижней панели: 0 = класс/уровень/опыт, 1 = статы
     @status_view_mode = 0
+	@list_top_index = 0
+    @selected_actor_index = 0      # индекс текущего персонажа в party
     
     load_textures
     load_actors
@@ -292,7 +326,17 @@ end
     @frame_x = @frame_start_x
     
   if @party.any?
-    @current_actor = @party[0]["name"]
+    # Проверяем, не выходит ли сохранённый индекс за пределы
+    if @selected_actor_index >= @party.length
+      @selected_actor_index = @party.length - 1
+    end
+    # Скролл подгоняем, чтобы выбранный персонаж был виден
+    if @selected_actor_index < @list_top_index
+      @list_top_index = @selected_actor_index
+    elsif @selected_actor_index >= @list_top_index + VISIBLE_ROWS
+      @list_top_index = @selected_actor_index - VISIBLE_ROWS + 1
+    end
+    @current_actor = @party[@selected_actor_index]["name"]
 
     # Находим данные актора
     actor = @party.find { |a| a["name"] == @current_actor }
@@ -307,8 +351,10 @@ end
 
     # Предметы и портреты
     @current_items = find_actor_items(@current_actor)
-    @portrait_tex = load_portrait(@current_actor)
-    @blink_tex = load_blink_portrait(@current_actor)
+    actor = @party.find { |a| a["name"] == @current_actor }
+    portrait_name = actor ? (actor["portrait"] || actor["name"]) : @current_actor
+    @portrait_tex = load_portrait(portrait_name)
+    @blink_tex = load_blink_portrait(portrait_name)
   else
     @current_actor = nil
     @current_spells = []
@@ -338,8 +384,12 @@ end
     close
   elsif Raylib.IsKeyPressed(Raylib::KEY_LEFT) || Raylib.IsKeyPressed(Raylib::KEY_RIGHT)
     @status_view_mode = 1 - @status_view_mode
-    end
+  elsif Raylib.IsKeyPressed(Raylib::KEY_UP)
+    change_selected_actor(-1)
+  elsif Raylib.IsKeyPressed(Raylib::KEY_DOWN)
+    change_selected_actor(1)
   end
+end
   
   def update
     return unless @visible
@@ -464,7 +514,7 @@ end
       end
     end
 
-        # ===== НИЖНЯЯ ПАНЕЛЬ: ЗАГОЛОВКИ =====
+    # ===== НИЖНЯЯ ПАНЕЛЬ: ЗАГОЛОВКИ =====
     header_y = @lower_y + 28
 
     if @status_view_mode == 0
@@ -490,8 +540,11 @@ end
       end
     end
 
-    # ===== НИЖНЯЯ ПАНЕЛЬ: СПИСОК ПАРТИИ =====
-    @party.each_with_index do |member, i|
+      # ===== НИЖНЯЯ ПАНЕЛЬ: СПИСОК ПАРТИИ (с прокруткой) =====
+      VISIBLE_ROWS.times do |i|
+      list_index = @list_top_index + i
+      break if list_index >= @party.length
+      member = @party[list_index]
       y = @lower_y + 71 + i * 34
 
       # Подсветка выбранного персонажа
@@ -524,7 +577,7 @@ end
         draw_text_centered_h(member["level"].to_s, level_header_center_x, y, 18, WHITE)
         draw_text_centered_h(member["exp"].to_s,    exp_header_center_x,   y, 18, WHITE)
       else
-        # Статы персонажа (пока берём начальные значения из класса)
+        # Статы персонажа
         klass = @classes_data.find { |c| c["id"] == member["class_id"] }
         if klass
           hp_start  = klass.dig("hp_growth", "start") || 0
@@ -539,11 +592,11 @@ end
 
         stat_values = [hp_start, mp_start, atk_start, def_start, agi_start, mov]
         stat_centers = [@lower_x + 200, @lower_x + 250, @lower_x + 300, @lower_x + 350, @lower_x + 400, @lower_x + 445]
+
         stat_values.each_with_index do |val, idx|
-          cx = stat_centers[idx]
-          draw_text_centered_h(val.to_s, cx, y, 18, WHITE)
-          end
+          draw_text_centered_h(val.to_s, stat_centers[idx], y, 18, WHITE)
         end
       end
+    end
     end
  end

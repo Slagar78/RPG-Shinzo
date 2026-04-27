@@ -45,6 +45,45 @@
       "defense_growth": { "start": 5, "projected": 35, "curve": "EARLYANDLATE" },
       "agility_growth": { "start": 7, "projected": 35, "curve": "LINEAR" },
       "spell_list": []
+    },
+	{
+      "id": 3,
+      "name": "KNTE",
+      "full_name": "Knight",
+      "move": 7,
+      "move_type": "CENTAUR",
+      "hp_growth": { "start": 11, "projected": 59, "curve": "LATE" },
+      "mp_growth": { "start": 0, "projected": 0, "curve": "NONE" },
+      "attack_growth": { "start": 5, "projected": 35, "curve": "LINEAR" },
+      "defense_growth": { "start": 5, "projected": 35, "curve": "EARLYANDLATE" },
+      "agility_growth": { "start": 7, "projected": 35, "curve": "LINEAR" },
+      "spell_list": []
+    },
+	{
+      "id": 4,
+      "name": "KNTE",
+      "full_name": "Knight",
+      "move": 7,
+      "move_type": "CENTAUR",
+      "hp_growth": { "start": 11, "projected": 59, "curve": "LATE" },
+      "mp_growth": { "start": 0, "projected": 0, "curve": "NONE" },
+      "attack_growth": { "start": 5, "projected": 35, "curve": "LINEAR" },
+      "defense_growth": { "start": 5, "projected": 35, "curve": "EARLYANDLATE" },
+      "agility_growth": { "start": 7, "projected": 35, "curve": "LINEAR" },
+      "spell_list": []
+    },
+	{
+      "id": 5,
+      "name": "KNTE",
+      "full_name": "Knight",
+      "move": 7,
+      "move_type": "CENTAUR",
+      "hp_growth": { "start": 11, "projected": 59, "curve": "LATE" },
+      "mp_growth": { "start": 0, "projected": 0, "curve": "NONE" },
+      "attack_growth": { "start": 5, "projected": 35, "curve": "LINEAR" },
+      "defense_growth": { "start": 5, "projected": 35, "curve": "EARLYANDLATE" },
+      "agility_growth": { "start": 7, "projected": 35, "curve": "LINEAR" },
+      "spell_list": []
     }
   ]
 }
