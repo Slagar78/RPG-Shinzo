@@ -482,7 +482,7 @@ end
       @selection_blink_timer += 1
     end
   end
-  
+# def draw метод
   def draw
     return unless @visible
 
@@ -664,7 +664,7 @@ end
     end
  end
 end 
-  # ============================================
+# ============================================
 # ОКНО ПРОФАЙЛА (Character Profile)
 # ============================================
 class Profile
