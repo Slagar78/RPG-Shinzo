@@ -1278,6 +1278,10 @@ end
     @selected_actor_index = 0      # индекс текущего персонажа в party
 	@input_timer_up = 0
     @input_timer_down = 0
+	@empty_magic_tex = nil
+    @empty_magic_tex_loaded = false
+	@icon_cache = {}
+    @empty_magic_tex = nil
     
     load_textures
     load_actors
@@ -1309,6 +1313,11 @@ end
     Raylib.SetTextureFilter(@lower_tex, 0) if @lower_tex
     Raylib.SetTextureFilter(@frame_tex, 0) if @frame_tex
 	Raylib.SetTextureFilter(@ruby_tex, 0) if @ruby_tex
+	
+	if File.exist?("assets/items/magic_empty.png")
+      @empty_magic_tex = Raylib.LoadTexture("assets/items/magic_empty.png")
+      Raylib.SetTextureFilter(@empty_magic_tex, 0)
+    end
   end
   
   def load_actors
@@ -1549,43 +1558,81 @@ end
     src = Raylib::Rectangle.create(0, 0, @frame_w, @frame_h)
     Raylib.DrawTexturePro(@frame_tex, src, dst, origin, 0, Raylib::WHITE)
 
-    # ===== ВЕРХНЯЯ ПАНЕЛЬ: ТЕКСТ =====
+    # ===== ВЕРХНЯЯ ПАНЕЛЬ: МАГИЯ (иконки крестом, текст как предметы в статусе) =====
     actor_data = @party.find { |a| a["name"] == @current_actor }
     if actor_data
       class_id   = actor_data["class_id"]
       class_name = @class_names[class_id] || "???"
       level      = actor_data["level"]
       header     = "#{actor_data["name"]}  #{class_name}  LV #{level}"
-      # Здесь в будущем можно поменять цвет текста, например на MAGENTA
       draw_text_custom(header, @upper_x + 25, @upper_y + 12, 20, WHITE)
     else
       draw_text_custom("NO DATA", @upper_x + 25, @upper_y + 12, 20, WHITE)
     end
 
-    # В магии мы, вероятно, заменим эту секцию на список заклинаний
-    draw_text_custom("Магия", @upper_x + 25, @upper_y + 42, 24, WHITE)
-    draw_text_custom("Предметы", @upper_x + 195, @upper_y + 38, 24, WHITE)
+    draw_text_custom("-- MAGIC --", @upper_x + 47, @upper_y + 35, 20, WHITE)
 
-    if @current_spells && @current_spells.any?
-      @current_spells.each_with_index do |spell, i|
-        y = @upper_y + 72 + i * 34
-        draw_text_custom("#{spell["spell"]} Lv#{spell["spell_level"]}", @upper_x + 25, y, 20, WHITE)
+    # === КРЕСТ ИКОНОК (не трогаем) ===
+    base_x = @upper_x + 40
+    base_y = @upper_y + 60
+    offset_x = 44
+    offset_y = 42
+
+    icon_positions = [
+      { x: base_x + offset_x, y: base_y + 8 },               # верхняя
+      { x: base_x,            y: base_y + offset_y },         # левая
+      { x: base_x + offset_x * 2, y: base_y + offset_y },    # правая
+      { x: base_x + offset_x, y: base_y + offset_y * 2 - 8 } # нижняя
+    ]
+
+    # === ТЕКСТ КАК ПРЕДМЕТЫ В СТАТУСЕ ===
+    text_x = @upper_x + 195           # как "Предметы" в StatusOverlay (правая колонка)
+    text_y = @upper_y + 48            # начало списка
+    text_line_h = 36                  # интервал, как у предметов
+
+    spells = @current_spells.first(4) if @current_spells
+
+    # Загрузка пустой текстуры
+    unless @empty_magic_tex_loaded
+      if File.exist?("assets/items/magic_empty.png")
+        @empty_magic_tex = Raylib.LoadTexture("assets/items/magic_empty.png")
+        Raylib.SetTextureFilter(@empty_magic_tex, 0) if @empty_magic_tex
       end
+      @empty_magic_tex_loaded = true
     end
 
-    if @current_items && @current_items.any?
-      @current_items.each_with_index do |item_entry, i|
-        next if item_entry["item"] == "NOTHING"
+    # Рисуем иконки
+    (0..3).each do |i|
+      ipos = icon_positions[i]
+      spell = spells[i] if spells && i < spells.length
 
-        y = @upper_y + 64 + i * 33
-        draw_item_name(item_entry["item"], @upper_x + 195, y, 18, WHITE)
-
-        if item_entry["equipped"]
-          draw_text_custom("E", @upper_x + 180, y, 18, YELLOW)
+      if spell
+        icon = load_icon(find_spell_icon(spell["spell"], spell["spell_level"]))
+        if icon
+          src = Raylib::Rectangle.create(0, 0, 32, 48)
+          dst = Raylib::Rectangle.create(ipos[:x], ipos[:y], 32, 48)
+          Raylib.DrawTexturePro(icon, src, dst, Raylib::Vector2.create(0, 0), 0, Raylib::WHITE)
+        end
+      else
+        if @empty_magic_tex
+          dst = Raylib::Rectangle.create(ipos[:x], ipos[:y], 32, 48)
+          Raylib.DrawTexturePro(@empty_magic_tex, Raylib::Rectangle.create(0,0,32,48), dst, Raylib::Vector2.create(0,0), 0, Raylib::WHITE)
+        else
+          Raylib.DrawRectangle(ipos[:x], ipos[:y], 32, 48, Raylib::GRAY)
         end
       end
     end
 
+    # Рисуем текст столбиком
+    (0..3).each do |i|
+      spell = spells[i] if spells && i < spells.length
+      next unless spell
+
+      y = text_y + i * text_line_h
+      draw_text_custom(spell["spell"], text_x, y, 20, PURPLE)
+      draw_text_custom("level #{spell["spell_level"]}", text_x + 14, y + 18, 20, LIME)
+    end
+	
     # ===== НИЖНЯЯ ПАНЕЛЬ: ЗАГОЛОВКИ =====
     header_y = @lower_y + 28
 
@@ -1687,4 +1734,32 @@ end
       end
     end
  end
+ 
+   def load_icon(path)
+    return nil unless path && !path.empty?
+    return @icon_cache[path] if @icon_cache.key?(path)
+
+    tex = nil
+    if File.exist?(path)
+      img = Raylib.LoadImage(path)
+      tex = Raylib.LoadTextureFromImage(img)
+      Raylib.UnloadImage(img)
+      Raylib.SetTextureFilter(tex, 0)
+    end
+    @icon_cache[path] = tex
+    tex
+  end
+
+  def find_spell_icon(name, level)
+    unless @spells_data
+      if File.exist?("data/actors/spells.json")
+        data = JSON.parse(File.read("data/actors/spells.json"))
+        @spells_data = data["spells"] || []
+      else
+        @spells_data = []
+      end
+    end
+    spell = @spells_data.find { |s| s["name"].casecmp?(name) && s["level"] == level }
+    spell ? spell["icon"] : nil
+  end
 end 
