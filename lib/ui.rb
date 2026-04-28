@@ -518,14 +518,14 @@ end
       class_id   = actor_data["class_id"]
       class_name = @class_names[class_id] || "???"
       level      = actor_data["level"]
-      header     = "#{actor_data["name"]}  #{class_name}  LV #{level}"
+      header     = "#{actor_data["name"].slice(0, 10)}  #{class_name.slice(0, 10)}  LV #{level}"
       draw_text_custom(header, @upper_x + 25, @upper_y + 12, 20, WHITE)
     else
       draw_text_custom("NO DATA", @upper_x + 25, @upper_y + 12, 20, WHITE)
     end
 
-    draw_text_custom("Магия", @upper_x + 25, @upper_y + 42, 24, WHITE)
-    draw_text_custom("Предметы", @upper_x + 195, @upper_y + 38, 24, WHITE)
+    draw_text_custom("Магия", @upper_x + 25, @upper_y + 38, 20, WHITE)
+    draw_text_custom("Предметы", @upper_x + 195, @upper_y + 38, 20, WHITE)
 
     # Магия из класса персонажа (только изученные заклинания)
     if @current_spells && @current_spells.any?
