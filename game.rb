@@ -169,12 +169,14 @@ class Game
 
     # ── Статусный оверлей (с кастомным шрифтом) ─
     @status_overlay = StatusOverlay.new(@font)
+	@magic_overlay = MagicOverlay.new(@font)
 	@profile = Profile.new(@font)
 
     # ── Состояние игры ──────────────────────────
     @game_state = :playing
 	@pending_profile_open = false
 	@pending_status_open = false
+	@pending_menu_open = false
 
     # ── 2D-камера для следования за игроком ─────
     @camera = Camera2D.new
@@ -207,28 +209,45 @@ def handle_input
     else
       @player.handle_input
     end
+# меню из 4плиток
   when :menu
     if IsKeyPressed(KEY_S)
       @game_state = :playing
       @menu.close
     elsif IsKeyPressed(KEY_A) || IsKeyPressed(KEY_D)
-      @game_state = :status
-      @status_overlay.open(@player)
+      case @menu.selected_index
+      when 0
+        @game_state = :status
+        @status_overlay.open(@player)
+      when 1
+        @game_state = :magic
+        @magic_overlay.open(@player)
+      else
+        @game_state = :playing
+        @menu.close
+      end
     else
       @menu.handle_input
     end
+	
   when :status
     if IsKeyPressed(KEY_S)
-      @game_state = :playing
-      @status_overlay.force_close
+      @status_overlay.close          # запускаем анимацию разборки
+      @pending_menu_open = true      # ждём завершения, затем вернёмся в меню
     elsif IsKeyPressed(KEY_A) || IsKeyPressed(KEY_D)
-      @status_overlay.close                # запускаем анимацию разборки
-      @pending_profile_open = true         # флаг, что после скрытия откроем профиль
-      # @game_state оставляем :status, чтобы статус продолжал обновляться
+      @status_overlay.close
+      @pending_profile_open = true
     else
       @status_overlay.handle_input
     end
-    when :profile
+  when :magic
+    if IsKeyPressed(KEY_S)
+      @magic_overlay.close          # запускаем анимацию разборки
+      @pending_menu_open = true     # ждём завершения, затем вернёмся в меню
+    else
+      @magic_overlay.handle_input
+    end
+  when :profile
     if IsKeyPressed(KEY_S) || IsKeyPressed(KEY_A) || IsKeyPressed(KEY_D)
       @profile.close
       @pending_status_open = true
@@ -244,6 +263,17 @@ end
     @menu.update if @game_state == :menu
     
 	@status_overlay.update if @game_state == :status
+	@magic_overlay.update if @game_state == :magic
+	
+if @pending_menu_open
+  if @game_state == :magic && !@magic_overlay.instance_variable_get(:@visible)
+    @game_state = :menu
+    @pending_menu_open = false
+  elsif @game_state == :status && !@status_overlay.instance_variable_get(:@visible)
+    @game_state = :menu
+    @pending_menu_open = false
+  end
+end
     # Когда статус полностью скрылся (после анимации), открываем Profile
     if @pending_profile_open && !@status_overlay.instance_variable_get(:@visible)
         @profile.open(
@@ -264,7 +294,6 @@ end
       @pending_status_open = false
       @game_state = :status
     end
-
     if @game_state == :playing
       target_x = @player.visual_x + @game_map.tile_size / 2.0
       target_y = @player.visual_y + @game_map.tile_size / 2.0
@@ -289,7 +318,6 @@ end
   def draw
     BeginDrawing()
     ClearBackground(RAYWHITE)
-
     BeginMode2D(@camera)
     @game_map.draw
     @player.draw
@@ -301,6 +329,8 @@ end
       @menu.draw
     when :status
       @status_overlay.draw
+	when :magic
+      @magic_overlay.draw
     when :profile
       @profile.draw
     end
