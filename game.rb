@@ -165,6 +165,7 @@ class Game
 
     # Загружаем шрифт с явным указанием нужных глифов
     @font = LoadFontEx("assets/ui/fonts/main.ttf", 20, cp_ptr, codepoints.size)
+	Raylib.SetTextureFilter(@font.texture, TEXTURE_FILTER_POINT)
 
     # ── Статусный оверлей (с кастомным шрифтом) ─
     @status_overlay = StatusOverlay.new(@font)

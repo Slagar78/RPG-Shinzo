@@ -747,6 +747,13 @@ class Profile
     @classes_data = classes_data
     @portrait_cache = portrait_cache
     @start_inventory = start_inventory
+	
+	# Загружаем общее золото из data/global.json
+    @gold = 0
+  if File.exist?("data/global.json")
+    data = JSON.parse(File.read("data/global.json"))
+    @gold = data["gold"] || 0
+  end
 
     # Загружаем портрет
     actor = @party.find { |a| a["name"] == actor_name }
@@ -1017,10 +1024,35 @@ class Profile
       src = Raylib::Rectangle.create(@sprite_frame * 48, 2 * 48, 48, 48)   # строка 2 = вниз
       dst = Raylib::Rectangle.create(@sub_panel_x + (134 - 48) / 2, @sub_panel_y + 48, 48, 48)
       Raylib.DrawTexturePro(@mapsprite_tex, src, dst,
-        Raylib::Vector2.create(0, 0), 0, Raylib::WHITE)
+        Raylib::Vector2.create(0, 0), 0, Raylib::WHITE)		
+	# Счётчики Kills и Defeats (под спрайтом)
+    if actor
+      kills = actor["kills"] || 0
+      defeats = actor["defeats"] || 0
+      text_x = @sub_panel_x + 15
+      text_y = @sub_panel_y + 106
+
+      draw_text_custom("KILLS", text_x, text_y, 18, WHITE)
+      # число — максимум 4 знака, зелёное
+      draw_text_custom([kills, 9999].min.to_s.rjust(4), text_x + 70, text_y, 18, GREEN)
+
+      draw_text_custom("DEFEAT", text_x, text_y + 25, 18, WHITE)
+      # число — максимум 4 знака, красное
+      draw_text_custom([defeats, 9999].min.to_s.rjust(4), text_x + 70, text_y + 25, 18, RED)
+	  
+      # Золото – заголовок и центрированное под ним значение (шрифт золота крупнее)
+      gold_y = text_y + 76
+      draw_text_custom("GOLD", text_x + 28, gold_y, 18, WHITE)
+
+      gold_digits = [@gold, 9999999999].min.to_s.chars.join(' ')
+      gold_header_width = Raylib.MeasureTextEx(@font, "GOLD", 18, 1).x
+      gold_center_x = (text_x + 28) + gold_header_width / 2
+      gold_val_width = Raylib.MeasureTextEx(@font, gold_digits, 20, 1).x   # размер шрифта увеличен до 20
+      val_x = gold_center_x - gold_val_width / 2
+      draw_text_custom(gold_digits, val_x, gold_y + 20, 20, YELLOW)        # и здесь 20
     end
-    
   end
+end
 # def draw_item_name Profile
 def draw_item_name(text, x, y, size, color)
     if text.include?(' ')

@@ -17,5 +17,6 @@
     { "effect": "slow", "chance_numerator": 1, "chance_denominator": 4 },
     { "effect": "drain_mp", "chance_numerator": 1, "chance_denominator": 4 },
     { "effect": "silence", "chance_numerator": 1, "chance_denominator": 4 }
-  ]
+  ],
+  "gold": 15090897
 }

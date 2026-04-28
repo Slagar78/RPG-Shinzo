@@ -3,7 +3,7 @@
     {
       "id": 0,
       "name": "SDMN",
-      "full_name": "SDMN",
+      "full_name": "Swordhero",
       "move": 6,
       "move_type": "REGULAR",
       "hp_growth": { "start": 12, "projected": 58, "curve": "LINEAR" },

@@ -4,65 +4,78 @@
       "id": 0,
       "name": "MUSHRA",
       "class_id": 0,
-	  "portrait": "Mushra",
+      "portrait": "Mushra",
       "mapsprite": "hero",
       "level": 1,
-      "exp": 0
+      "exp": 0,
+      "kills": 0,
+      "defeats": 0
     },
     {
       "id": 1,
       "name": "SARAH",
       "class_id": 1,
-	  "portrait": "Daku",
+      "portrait": "Daku",
       "mapsprite": "hero",
       "level": 1,
-      "exp": 0
-	  
+      "exp": 0,
+      "kills": 0,
+      "defeats": 0
     },
     {
       "id": 2,
       "name": "CHESTER",
       "class_id": 2,
-	  "portrait": "Kutal",
+      "portrait": "Kutal",
       "mapsprite": "hero",
       "level": 1,
-      "exp": 0
+      "exp": 0,
+      "kills": 0,
+      "defeats": 0
     },
-	{
+    {
       "id": 3,
       "name": "Kane",
       "class_id": 3,
-	  "portrait": "Ryuma",
+      "portrait": "Ryuma",
       "mapsprite": "hero",
       "level": 1,
-      "exp": 0
+      "exp": 0,
+      "kills": 0,
+      "defeats": 0
     },
-	{
+    {
       "id": 4,
       "name": "Mane",
       "class_id": 4,
-	  "portrait": "Rusephina",
+      "portrait": "Rusephina",
       "mapsprite": "hero",
       "level": 1,
-      "exp": 0
+      "exp": 0,
+      "kills": 0,
+      "defeats": 0
     },
-	{
+    {
       "id": 5,
       "name": "Wolf",
       "class_id": 5,
-	  "portrait": "Gyasa",
+      "portrait": "Gyasa",
       "mapsprite": "hero",
       "level": 1,
-      "exp": 0
+      "exp": 0,
+      "kills": 0,
+      "defeats": 0
     },
-	{
+    {
       "id": 6,
       "name": "Bane",
       "class_id": 6,
-	  "portrait": "Saago",
+      "portrait": "Saago",
       "mapsprite": "hero",
       "level": 8,
-      "exp": 0
+      "exp": 0,
+      "kills": 0,
+      "defeats": 0
     }
   ]
 }
