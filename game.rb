@@ -150,7 +150,13 @@ class Game
     @player = Player.new(@game_map)
 
     # ── Нижнее меню (4 плитки) ─────────────────
-    @menu = BottomMenu.new
+    @menu = BottomMenu.new	
+    @items_submenu = BottomMenu.new([
+      { "id" => 0, "name" => "use",   "icon" => "assets/ui/menu/Use.png",   "icon_anim" => "assets/ui/menu/Use_anim.png" },
+      { "id" => 1, "name" => "give",  "icon" => "assets/ui/menu/Give.png",  "icon_anim" => "assets/ui/menu/Give_anim.png" },
+      { "id" => 2, "name" => "equip", "icon" => "assets/ui/menu/Equip.png", "icon_anim" => "assets/ui/menu/Equip_anim.png" },
+      { "id" => 3, "name" => "drop",  "icon" => "assets/ui/menu/Drop.png",  "icon_anim" => "assets/ui/menu/Drop_anim.png" }
+    ])
 
     # ── Загрузка шрифта с поддержкой кириллицы ──
     codepoints = []
@@ -215,13 +221,16 @@ def handle_input
       @game_state = :playing
       @menu.close
     elsif IsKeyPressed(KEY_A) || IsKeyPressed(KEY_D)
-      case @menu.selected_index
+        case @menu.selected_index
       when 0
         @game_state = :status
         @status_overlay.open(@player)
       when 1
         @game_state = :magic
         @magic_overlay.open(@player)
+      when 2
+        @game_state = :items
+        @items_submenu.open
       else
         @game_state = :playing
         @menu.close
@@ -247,6 +256,17 @@ def handle_input
     else
       @magic_overlay.handle_input
     end
+	
+  when :items
+    if IsKeyPressed(KEY_S)
+      @items_submenu.close
+      @game_state = :menu
+    elsif IsKeyPressed(KEY_A) || IsKeyPressed(KEY_D)
+      # Пока ничего не делаем (в будущем здесь будет вызов действия)
+    else
+      @items_submenu.handle_input
+  end
+	
   when :profile
     if IsKeyPressed(KEY_S) || IsKeyPressed(KEY_A) || IsKeyPressed(KEY_D)
       @profile.close
@@ -261,7 +281,7 @@ end
     @player.update_animation
     @player.update_movement if @game_state == :playing
     @menu.update if @game_state == :menu
-    
+	@items_submenu.update if @game_state == :items   
 	@status_overlay.update if @game_state == :status
 	@magic_overlay.update if @game_state == :magic
 	
@@ -333,6 +353,8 @@ end
       @magic_overlay.draw
     when :profile
       @profile.draw
+	when :items
+      @items_submenu.draw
     end
 
     DrawText("FPS: #{GetFPS()}", 576 - 100, 10, 20, DARKGRAY)

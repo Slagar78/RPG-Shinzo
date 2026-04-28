@@ -6,8 +6,10 @@ require 'json'
 # ============================================
 class BottomMenu
   attr_reader :selected_index
-  def initialize
-    load_tiles
+
+  # tiles_data – необязательный массив хешей с ключами id, name, icon, icon_anim
+  def initialize(tiles_data = nil)
+    load_tiles(tiles_data)
     @visible = false
     @selected_index = 0
     @anim_timer = 0
@@ -15,17 +17,19 @@ class BottomMenu
     @offset = 48
     load_textures
   end
-  
-  def load_tiles
-    if File.exist?("data/menu.json")
+
+  def load_tiles(tiles_data = nil)
+    if tiles_data
+      @tiles = tiles_data
+    elsif File.exist?("data/menu.json")
       data = JSON.parse(File.read("data/menu.json"))
       @tiles = data["tiles"]
     else
       @tiles = [
         { "id" => 0, "name" => "status", "icon" => "assets/ui/menu/status.png", "icon_anim" => "assets/ui/menu/status_anim.png" },
-        { "id" => 1, "name" => "magic", "icon" => "assets/ui/menu/magic.png", "icon_anim" => "assets/ui/menu/magic_anim.png" },
-        { "id" => 2, "name" => "items", "icon" => "assets/ui/menu/items.png", "icon_anim" => "assets/ui/menu/items_anim.png" },
-        { "id" => 3, "name" => "event", "icon" => "assets/ui/menu/event.png", "icon_anim" => "assets/ui/menu/event_anim.png" }
+        { "id" => 1, "name" => "magic",  "icon" => "assets/ui/menu/magic.png",  "icon_anim" => "assets/ui/menu/magic_anim.png" },
+        { "id" => 2, "name" => "items",  "icon" => "assets/ui/menu/items.png",  "icon_anim" => "assets/ui/menu/items_anim.png" },
+        { "id" => 3, "name" => "event",  "icon" => "assets/ui/menu/event.png",  "icon_anim" => "assets/ui/menu/event_anim.png" }
       ]
     end
   end
@@ -88,7 +92,7 @@ class BottomMenu
       pos = positions[i]
       
       if i == @selected_index
-        use_anim = (@anim_timer % 24) < 12
+        use_anim = (@anim_timer % 24) < 12 && tex[:anim]
         texture = use_anim ? tex[:anim] : tex[:normal]
       else
         texture = tex[:normal]
