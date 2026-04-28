@@ -1293,7 +1293,10 @@ void handle_dialog_click(Editor *ed, int mx, int my) {
             case DIALOG_MUSIC_MAP: {
                 Map *cur = current_map(ed);
                 if (cur) {
-                    safe_strcpy(cur->music_file, sizeof(cur->music_file), ed->input_text);
+                    // Преобразуем абсолютный путь в относительный (как для тайлсетов)
+                    char rel_music[256];
+                    get_relative_path(ed->input_text, rel_music, sizeof(rel_music));
+                    safe_strcpy(cur->music_file, sizeof(cur->music_file), rel_music);
                     cur->music_volume = (float)atof(ed->input_text2);
                     // сразу сохраняем карту
                     char path[128];
