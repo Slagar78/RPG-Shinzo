@@ -551,10 +551,16 @@ end
         y = @lower_y + 71 + i * 34
 
         if member["name"] == @current_actor
-          pulse = Math.sin(@selection_blink_timer * 0.2) * 0.4 + 0.6
-          alpha = (pulse * 255).to_i
-          highlight = Raylib.Fade(Raylib::BLUE, alpha / 255.0)
-          Raylib.DrawRectangle(@lower_x + 38, y - 4, 138, 28, highlight)
+          if @focus == :items
+            # Без мигания, постоянная полупрозрачная синяя рамка
+            highlight = Raylib.Fade(Raylib::BLUE, 0.5)
+            Raylib.DrawRectangle(@lower_x + 38, y - 4, 138, 28, highlight)
+          else
+            pulse = Math.sin(@selection_blink_timer * 0.2) * 0.4 + 0.6
+            alpha = (pulse * 255).to_i
+            highlight = Raylib.Fade(Raylib::BLUE, alpha / 255.0)
+            Raylib.DrawRectangle(@lower_x + 38, y - 4, 138, 28, highlight)
+          end
         end
 
         if @ruby_tex
@@ -591,10 +597,16 @@ end
         y = @lower_y + 71 + i * 34
 
         if member["name"] == @current_actor
-          pulse = Math.sin(@selection_blink_timer * 0.2) * 0.4 + 0.6
-          alpha = (pulse * 255).to_i
-          highlight = Raylib.Fade(Raylib::BLUE, alpha / 255.0)
-          Raylib.DrawRectangle(@lower_x + 38, y - 4, 138, 28, highlight)
+          if @focus == :items
+            # Без мигания, постоянная полупрозрачная синяя рамка
+            highlight = Raylib.Fade(Raylib::BLUE, 0.5)
+            Raylib.DrawRectangle(@lower_x + 38, y - 4, 138, 28, highlight)
+          else
+            pulse = Math.sin(@selection_blink_timer * 0.2) * 0.4 + 0.6
+            alpha = (pulse * 255).to_i
+            highlight = Raylib.Fade(Raylib::BLUE, alpha / 255.0)
+            Raylib.DrawRectangle(@lower_x + 38, y - 4, 138, 28, highlight)
+          end
         end
 
         if @ruby_tex
