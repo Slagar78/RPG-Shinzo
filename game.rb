@@ -4,6 +4,7 @@ require_relative 'lib/database'
 require_relative 'lib/player'
 require_relative 'lib/ui'
 require_relative 'lib/AudioManager'
+require_relative 'lib/item_actions_ui'
 require 'json'
 
 shared_lib_path = Gem::Specification.find_by_name('raylib-bindings').full_gem_path + '/lib/'
@@ -172,6 +173,31 @@ class Game
     # Загружаем шрифт с явным указанием нужных глифов
     @font = LoadFontEx("assets/ui/fonts/main.ttf", 20, cp_ptr, codepoints.size)
 	Raylib.SetTextureFilter(@font.texture, TEXTURE_FILTER_POINT)
+	
+	# ── Загрузка общих данных для меню предметов ──
+    @party = []
+   if File.exist?("data/actors/actors.json")
+    data = JSON.parse(File.read("data/actors/actors.json"))
+    @party = data["actors"] || []
+   end
+
+    @classes_data = []
+    @class_names = {}
+   if File.exist?("data/actors/classes.json")
+    data = JSON.parse(File.read("data/actors/classes.json"))
+    @classes_data = data["classes"] || []
+    @classes_data.each { |c| @class_names[c["id"]] = c["name"] }
+   end
+
+    @start_inventory = []
+   if File.exist?("data/actors/start_inventory.json")
+    data = JSON.parse(File.read("data/actors/start_inventory.json"))
+    @start_inventory = data["start_inventory"] || []
+   end
+
+    # Предметные подменю
+    @use_menu = UseMenu.new(@font, @party, @classes_data, @class_names, @start_inventory)
+    # Позже добавятся GiveMenu, EquipMenu, DropMenu
 
     # ── Статусный оверлей (с кастомным шрифтом) ─
     @status_overlay = StatusOverlay.new(@font)
@@ -183,6 +209,8 @@ class Game
 	@pending_profile_open = false
 	@pending_status_open = false
 	@pending_menu_open = false
+	@active_item_action = nil   # будет хранить текущее окно (Use/Give/...)
+	@pending_items_close = false
 
     # ── 2D-камера для следования за игроком ─────
     @camera = Camera2D.new
@@ -205,7 +233,7 @@ class Game
 	Raylib.UnloadFont(@font) if @font
     CloseWindow()
   end
-
+# HANDLE INPUT
 def handle_input
   case @game_state
   when :playing
@@ -257,15 +285,25 @@ def handle_input
       @magic_overlay.handle_input
     end
 	
-  when :items
+    when :items
     if IsKeyPressed(KEY_S)
       @items_submenu.close
       @game_state = :menu
     elsif IsKeyPressed(KEY_A) || IsKeyPressed(KEY_D)
-      # Пока ничего не делаем (в будущем здесь будет вызов действия)
+      unless @pending_items_close
+        case @items_submenu.selected_index
+        when 0   # Use
+          @use_menu.open
+          @active_item_action = @use_menu
+          @game_state = :item_action
+        # when 1 # Give
+        # when 2 # Equip
+        # when 3 # Drop
+        end
+      end
     else
-      @items_submenu.handle_input
-  end
+      @items_submenu.handle_input unless @pending_items_close
+    end
 	
   when :profile
     if IsKeyPressed(KEY_S) || IsKeyPressed(KEY_A) || IsKeyPressed(KEY_D)
@@ -273,6 +311,11 @@ def handle_input
       @pending_status_open = true
       # @game_state остаётся :profile, чтобы анимация завершилась
     end
+	
+  when :item_action
+  @active_item_action.handle_input
+  # Если окно начало анимацию закрытия (S на персонажах), запоминаем, чтобы дождаться конца
+  @pending_items_close = true if @active_item_action.anim_phase == 3
   end
 end
 
@@ -284,6 +327,7 @@ end
 	@items_submenu.update if @game_state == :items   
 	@status_overlay.update if @game_state == :status
 	@magic_overlay.update if @game_state == :magic
+	@active_item_action&.update if @game_state == :item_action
 	
 if @pending_menu_open
   if @game_state == :magic && !@magic_overlay.instance_variable_get(:@visible)
@@ -333,6 +377,12 @@ end
       cam_y = lerp(cam_y, target_y, smooth)
       @camera.target = Vector2.create(cam_x, cam_y)   # без round!
     end
+	
+	# Ожидание закрытия окна Use/Give/Drop/Equip
+    if @pending_items_close && @active_item_action && !@active_item_action.visible
+    @game_state = :items
+    @pending_items_close = false
+    end
   end
 
   def draw
@@ -343,18 +393,20 @@ end
     @player.draw
     @game_map.draw_under_tiles
     EndMode2D()
-
+	
     case @game_state
     when :menu
       @menu.draw
     when :status
       @status_overlay.draw
-	when :magic
+    when :magic
       @magic_overlay.draw
     when :profile
       @profile.draw
-	when :items
+    when :items
       @items_submenu.draw
+    when :item_action
+      @active_item_action.draw
     end
 
     DrawText("FPS: #{GetFPS()}", 576 - 100, 10, 20, DARKGRAY)

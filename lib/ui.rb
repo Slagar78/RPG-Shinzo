@@ -1318,8 +1318,8 @@ end
     Raylib.SetTextureFilter(@frame_tex, 0) if @frame_tex
 	Raylib.SetTextureFilter(@ruby_tex, 0) if @ruby_tex
 	
-	if File.exist?("assets/items/magic_empty.png")
-      @empty_magic_tex = Raylib.LoadTexture("assets/items/magic_empty.png")
+	if File.exist?("assets/items/item_empty.png")
+      @empty_magic_tex = Raylib.LoadTexture("assets/items/item_empty.png")
       Raylib.SetTextureFilter(@empty_magic_tex, 0)
     end
   end
@@ -1598,8 +1598,8 @@ end
 
     # Загрузка пустой текстуры
     unless @empty_magic_tex_loaded
-      if File.exist?("assets/items/magic_empty.png")
-        @empty_magic_tex = Raylib.LoadTexture("assets/items/magic_empty.png")
+      if File.exist?("assets/spell/magic_empty.png")
+        @empty_magic_tex = Raylib.LoadTexture("assets/spell/magic_empty.png")
         Raylib.SetTextureFilter(@empty_magic_tex, 0) if @empty_magic_tex
       end
       @empty_magic_tex_loaded = true
