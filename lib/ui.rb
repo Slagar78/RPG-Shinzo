@@ -951,19 +951,19 @@ class Profile
       left_x = @right_panel_x + 55
       right_x = @right_panel_x + 210
       y_base = @right_panel_y + 55
-      line_h = 32
+      line_h = 28 # интервал
 
       # Левый столбец
-      draw_text_custom("LV    #{lv}", left_x, y_base, 22, WHITE)
-      draw_text_custom("HP    #{hp_start}", left_x, y_base + line_h, 22, WHITE)
-      draw_text_custom("MP    #{mp_start}", left_x, y_base + line_h * 2, 22, WHITE)
-      draw_text_custom("EXP   #{exp}", left_x, y_base + line_h * 3, 22, WHITE)
+      draw_text_custom("LV    #{lv}", left_x, y_base, 20, WHITE)
+      draw_text_custom("HP    #{hp_start}", left_x, y_base + line_h, 20, WHITE)
+      draw_text_custom("MP    #{mp_start}", left_x, y_base + line_h * 2, 20, WHITE)
+      draw_text_custom("EXP   #{exp}", left_x, y_base + line_h * 3, 20, WHITE)
 
       # Правый столбец
-      draw_text_custom("ATT   #{atk_start}", right_x, y_base, 22, WHITE)
-      draw_text_custom("DEF   #{def_start}", right_x, y_base + line_h, 22, WHITE)
-      draw_text_custom("AGI   #{agi_start}", right_x, y_base + line_h * 2, 22, WHITE)
-      draw_text_custom("MOV   #{mov}", right_x, y_base + line_h * 3, 22, WHITE)
+      draw_text_custom("ATT   #{atk_start}", right_x - 50, y_base, 20, WHITE)
+      draw_text_custom("DEF   #{def_start}", right_x - 50, y_base + line_h, 20, WHITE)
+      draw_text_custom("AGI   #{agi_start}", right_x - 50, y_base + line_h * 2, 20, WHITE)
+      draw_text_custom("MOV   #{mov}", right_x - 50, y_base + line_h * 3, 20, WHITE)
 	  	  
 	        # Получаем заклинания
       klass = @classes_data.find { |c| c["id"] == actor["class_id"] }
@@ -1047,7 +1047,7 @@ class Profile
 	  
       # Золото – заголовок и центрированное под ним значение (шрифт золота крупнее)
       gold_y = text_y + 76
-      draw_text_custom("GOLD", text_x + 28, gold_y, 18, WHITE)
+      draw_text_custom("GOLD", text_x + 28, gold_y, 20, WHITE)
 
       gold_digits = [@gold, 9999999999].min.to_s.chars.join(' ')
       gold_header_width = Raylib.MeasureTextEx(@font, "GOLD", 18, 1).x
