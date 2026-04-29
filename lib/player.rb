@@ -39,6 +39,9 @@ class Player
     @current_speed = MOVE_SPEED
     @just_turned = false   # Флаг: только что повернулся – не начинать движение в этом кадре
     load_textures
+	@src_rect = Rectangle.create(0, 0, TILE_SIZE, TILE_SIZE)
+    @dst_rect = Rectangle.create(0, 0, TILE_SIZE, TILE_SIZE)
+    @draw_origin = Vector2.create(0, 0)
   end
 
   def load_textures
@@ -142,40 +145,35 @@ class Player
   end
 
 def draw
-    px = @x * TILE_SIZE
-    py = @y * TILE_SIZE - 16   # <-- добавить смещение вверх на 1/3 тайла
+  px = (@x * TILE_SIZE).round
+  py = (@y * TILE_SIZE - 16).round
 
-    if @moving
-      case @move_dir
-      when DIR_RIGHT then px += @move_offset * TILE_SIZE
-      when DIR_LEFT  then px -= @move_offset * TILE_SIZE
-      when DIR_DOWN  then py += @move_offset * TILE_SIZE
-      when DIR_UP    then py -= @move_offset * TILE_SIZE
-      end
+  if @moving
+    offset = (@move_offset * TILE_SIZE).round
+    case @move_dir
+    when DIR_RIGHT then px += offset
+    when DIR_LEFT  then px -= offset
+    when DIR_DOWN  then py += offset
+    when DIR_UP    then py -= offset
     end
+  end
 
-    texture = (@direction == DIR_RIGHT) ? @tex_right : @tex_left
+  texture = (@direction == DIR_RIGHT) ? @tex_right : @tex_left
 
-    row = case @direction
-          when DIR_UP    then 0
-          when DIR_LEFT  then 1
-          when DIR_RIGHT then 1
-          else 2
-          end
+  row = case @direction
+        when DIR_UP    then 0
+        when DIR_LEFT, DIR_RIGHT then 1
+        else 2
+        end
 
-    src = Rectangle.create
-    src.x = @pattern * TILE_SIZE
-    src.y = row * TILE_SIZE
-    src.width = TILE_SIZE
-    src.height = TILE_SIZE
+  # Используем закешированные прямоугольники
+  @src_rect.x = @pattern * TILE_SIZE
+  @src_rect.y = row * TILE_SIZE
 
-    dst = Rectangle.create
-    dst.x = px
-    dst.y = py          # py уже со смещением -16
-    dst.width = TILE_SIZE
-    dst.height = TILE_SIZE
+  @dst_rect.x = px
+  @dst_rect.y = py
 
-    DrawTexturePro(texture, src, dst, Vector2.create(0, 0), 0, WHITE)
+  DrawTexturePro(texture, @src_rect, @dst_rect, @draw_origin, 0, WHITE)
 end
 
   def visual_x

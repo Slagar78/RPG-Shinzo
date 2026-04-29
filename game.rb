@@ -23,6 +23,7 @@ class GameMap
 
   def initialize
     maps = Dir["data/maps/*.json"]
+    @src_rect_cache = {}          # <-- инициализируем до всех проверок
     if maps.empty?
       puts "No maps found in data/maps/"
       @width = 20
@@ -57,6 +58,8 @@ class GameMap
     tileset_path = data['tileset'] || "assets/tilesets/tileset.png"
     @tileset_texture = LoadTexture(tileset_path)
     @tile_size = 48
+	@dst_rect = Rectangle.create(0, 0, @tile_size, @tile_size)
+    @zero_vec = Vector2.create(0, 0)
     # Размеры тайлсета
     tex_w = @tileset_texture.width
     tex_h = @tileset_texture.height
@@ -67,19 +70,22 @@ class GameMap
 
   # Новый метод: по ID тайла возвращает Rectangle – область в текстуре
   def tile_src_rect(tile_id)
-    return nil if tile_id.nil? || tile_id < 0
-    if tile_id < 128
-      # Левая половина (8x16)
-      col = tile_id % @half_cols
-      row = tile_id / @half_cols
-    else
-      # Правая половина (8x16)
-      local_id = tile_id - 128
-      col = @half_cols + (local_id % @half_cols)
-      row = local_id / @half_cols
-    end
-    Rectangle.create(col * @tile_size, row * @tile_size, @tile_size, @tile_size)
+  return nil if tile_id.nil? || tile_id < 0
+  return @src_rect_cache[tile_id] if @src_rect_cache.key?(tile_id)
+
+  if tile_id < 128
+    col = tile_id % @half_cols
+    row = tile_id / @half_cols
+  else
+    local_id = tile_id - 128
+    col = @half_cols + (local_id % @half_cols)
+    row = local_id / @half_cols
   end
+
+  rect = Rectangle.create(col * @tile_size, row * @tile_size, @tile_size, @tile_size)
+  @src_rect_cache[tile_id] = rect
+  rect
+end
 
   def draw
     return unless @tileset_texture
@@ -89,8 +95,10 @@ class GameMap
         next if tile_id.nil? || tile_id < 0
         src = tile_src_rect(tile_id)
         next unless src
-        dst = Rectangle.create(x * @tile_size, y * @tile_size, @tile_size, @tile_size)
-        DrawTexturePro(@tileset_texture, src, dst, Vector2.create(0, 0), 0, WHITE)
+        dst = @dst_rect
+        dst.x = x * @tile_size
+        dst.y = y * @tile_size
+        DrawTexturePro(@tileset_texture, src, dst, @zero_vec, 0, WHITE)
       end
     end
   end
@@ -105,64 +113,78 @@ class GameMap
         next unless type == 3
         src = tile_src_rect(tile_id)
         next unless src
-        dst = Rectangle.create(x * @tile_size, y * @tile_size, @tile_size, @tile_size)
-        DrawTexturePro(@tileset_texture, src, dst, Vector2.create(0, 0), 0, WHITE)
+        dst = @dst_rect
+        dst.x = x * @tile_size
+        dst.y = y * @tile_size
+        DrawTexturePro(@tileset_texture, src, dst, @zero_vec, 0, WHITE)
       end
     end
   end
 
-  # === НОВЫЕ МЕТОДЫ ДЛЯ ОТСЕЧЕНИЯ НЕВИДИМЫХ ТАЙЛОВ ===
+# === ОПТИМИЗИРОВАННЫЕ МЕТОДЫ С ОТСЕЧЕНИЕМ ===
+def draw_visible(camera)
+  return unless @tileset_texture
 
-  def draw_visible(camera)
-    return unless @tileset_texture
-    # Определяем видимую область с небольшим запасом
-    screen_left   = ((camera.target.x - camera.offset.x) / @tile_size).floor - 1
-    screen_right  = ((camera.target.x + camera.offset.x) / @tile_size).ceil  + 1
-    screen_top    = ((camera.target.y - camera.offset.y) / @tile_size).floor - 1
-    screen_bottom = ((camera.target.y + camera.offset.y) / @tile_size).ceil  + 1
+  view_left   = camera.target.x - camera.offset.x
+  view_right  = camera.target.x + camera.offset.x
+  view_top    = camera.target.y - camera.offset.y
+  view_bottom = camera.target.y + camera.offset.y
 
-    start_x = [0, screen_left].max
-    end_x   = [@width, screen_right].min
-    start_y = [0, screen_top].max
-    end_y   = [@height, screen_bottom].min
+  start_x = [ (view_left / @tile_size).floor - 1, 0 ].max
+  end_x   = [ (view_right / @tile_size).ceil + 1, @width ].min
+  start_y = [ (view_top / @tile_size).floor - 1, 0 ].max
+  end_y   = [ (view_bottom / @tile_size).ceil + 1, @height ].min
 
-    (start_x...end_x).each do |x|
-      (start_y...end_y).each do |y|
-        tile_id = @tiles[x][y]
-        next if tile_id.nil? || tile_id < 0
-        src = tile_src_rect(tile_id)
-        next unless src
-        dst = Rectangle.create(x * @tile_size, y * @tile_size, @tile_size, @tile_size)
-        DrawTexturePro(@tileset_texture, src, dst, Vector2.create(0, 0), 0, WHITE)
-      end
+  (start_x...end_x).each do |x|
+    (start_y...end_y).each do |y|
+      tile_id = @tiles[x][y]
+      next if tile_id.nil? || tile_id < 0
+
+      src = tile_src_rect(tile_id)
+      next unless src
+
+      # Переиспользуем закешированный прямоугольник
+      dst = @dst_rect
+      dst.x = x * @tile_size
+      dst.y = y * @tile_size
+
+      DrawTexturePro(@tileset_texture, src, dst, @zero_vec, 0, WHITE)
     end
   end
+end
 
-  def draw_under_tiles_visible(camera)
-    return unless @tileset_texture
-    screen_left   = ((camera.target.x - camera.offset.x) / @tile_size).floor - 1
-    screen_right  = ((camera.target.x + camera.offset.x) / @tile_size).ceil  + 1
-    screen_top    = ((camera.target.y - camera.offset.y) / @tile_size).floor - 1
-    screen_bottom = ((camera.target.y + camera.offset.y) / @tile_size).ceil  + 1
+def draw_under_tiles_visible(camera)
+  return unless @tileset_texture
 
-    start_x = [0, screen_left].max
-    end_x   = [@width, screen_right].min
-    start_y = [0, screen_top].max
-    end_y   = [@height, screen_bottom].min
+  view_left   = camera.target.x - camera.offset.x
+  view_right  = camera.target.x + camera.offset.x
+  view_top    = camera.target.y - camera.offset.y
+  view_bottom = camera.target.y + camera.offset.y
 
-    (start_x...end_x).each do |x|
-      (start_y...end_y).each do |y|
-        tile_id = @tiles[x][y]
-        next if tile_id.nil? || tile_id < 0
-        type = @tile_types[tile_id] || 0
-        next unless type == 3
-        src = tile_src_rect(tile_id)
-        next unless src
-        dst = Rectangle.create(x * @tile_size, y * @tile_size, @tile_size, @tile_size)
-        DrawTexturePro(@tileset_texture, src, dst, Vector2.create(0, 0), 0, WHITE)
-      end
+  start_x = [ (view_left / @tile_size).floor - 1, 0 ].max
+  end_x   = [ (view_right / @tile_size).ceil + 1, @width ].min
+  start_y = [ (view_top / @tile_size).floor - 1, 0 ].max
+  end_y   = [ (view_bottom / @tile_size).ceil + 1, @height ].min
+
+  (start_x...end_x).each do |x|
+    (start_y...end_y).each do |y|
+      tile_id = @tiles[x][y]
+      next if tile_id.nil? || tile_id < 0
+
+      type = @tile_types[tile_id] || 0
+      next unless type == 3
+
+      src = tile_src_rect(tile_id)
+      next unless src
+
+      dst = @dst_rect
+      dst.x = x * @tile_size
+      dst.y = y * @tile_size
+
+      DrawTexturePro(@tileset_texture, src, dst, @zero_vec, 0, WHITE)
     end
   end
+end
 
   # === КОНЕЦ НОВЫХ МЕТОДОВ ===
 
@@ -275,6 +297,7 @@ class Game
       @player.x * @game_map.tile_size + 24,
       @player.y * @game_map.tile_size + 24
     )
+	@snapped_camera = Camera2D.new
   end
 
   def run
@@ -445,20 +468,16 @@ def draw
     ClearBackground(RAYWHITE)
 
     # --- ИСПРАВЛЕНИЕ МИКРОФРИЗОВ ---
-    # Создаём новую камеру для отрисовки, у которой target всегда целый
-    snapped_camera = Camera2D.new
-    snapped_camera.zoom   = @camera.zoom
-    snapped_camera.offset = @camera.offset
-    snapped_camera.target = Vector2.create(
-      @camera.target.x.round,   # округляем до целых пикселей
+    @snapped_camera.zoom   = @camera.zoom
+    @snapped_camera.offset = @camera.offset
+    @snapped_camera.target = Vector2.create(
+      @camera.target.x.round,
       @camera.target.y.round
     )
-
-    # Рисуем карту и игрока с использованием ОКРУГЛЁННОЙ камеры
-    BeginMode2D(snapped_camera)
-    @game_map.draw_visible(snapped_camera)        # ← рисуем только видимые тайлы
+    BeginMode2D(@snapped_camera)
+    @game_map.draw_visible(@snapped_camera)
     @player.draw
-    @game_map.draw_under_tiles_visible(snapped_camera)  # ← под тайлами тоже только видимые
+    @game_map.draw_under_tiles_visible(@snapped_camera)
     EndMode2D()
     # --------------------------------
 
