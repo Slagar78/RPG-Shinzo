@@ -5,10 +5,10 @@ TILE_SIZE = 48
 DEFAULT_GRID_W = 12
 DEFAULT_GRID_H = 10
 
-DIR_DOWN = 2
-DIR_LEFT = 4
+DIR_DOWN  = 2
+DIR_LEFT  = 4
 DIR_RIGHT = 6
-DIR_UP = 8
+DIR_UP    = 8
 
 MOVE_SPEED = 0.09
 ANIM_SPEED = 12
@@ -21,55 +21,57 @@ class Player
   attr_accessor :map
 
   def initialize(map = nil)
-  @map = map
+    @map = map
 
-  if @map
-    @x = @map.width / 2
-    @y = @map.height / 2
-  else
-    @x = 6
-    @y = 5
+    if @map
+      @x = @map.width / 2
+      @y = @map.height / 2
+    else
+      @x = 6
+      @y = 5
+    end
+
+    @direction     = DIR_DOWN
+    @pattern       = 0
+    @moving        = false
+    @move_dir      = DIR_DOWN
+    @move_offset   = 0.0
+    @anim_frame    = 0
+    @can_move      = true
+    @current_speed = MOVE_SPEED
+    @just_turned   = false
+
+    # Объекты для отрисовки (кэшируем один раз)
+    init_render_objects
+
+    load_textures
   end
 
-  @direction     = DIR_DOWN
-  @pattern       = 0
-  @moving        = false
-  @move_dir      = DIR_DOWN
-  @move_offset   = 0.0
-  @anim_frame    = 0
-  @can_move      = true
-  @current_speed = MOVE_SPEED
-  @just_turned   = false
-
-  init_render_objects   # ← отдельный метод
-  load_textures
-end
-
-def init_render_objects
-  @src_rect    = Rectangle.create(0, 0, TILE_SIZE, TILE_SIZE)
-  @dst_rect    = Rectangle.create(0, 0, TILE_SIZE, TILE_SIZE)
-  @draw_origin = Vector2.create(0, 0)
-end
+  def init_render_objects
+    @src_rect    = Rectangle.create(0, 0, TILE_SIZE, TILE_SIZE)
+    @dst_rect    = Rectangle.create(0, 0, TILE_SIZE, TILE_SIZE)
+    @draw_origin = Vector2.create(0, 0)
+  end
 
   def load_textures
     img = LoadImage("assets/mapsprites/hero.png")
     img_mirror = ImageCopy(img)
     ImageFlipHorizontal(img_mirror)
 
-    @tex_left = LoadTextureFromImage(img)
+    @tex_left  = LoadTextureFromImage(img)
     @tex_right = LoadTextureFromImage(img_mirror)
 
-    SetTextureFilter(@tex_left, TEXTURE_FILTER_POINT)
+    SetTextureFilter(@tex_left,  TEXTURE_FILTER_POINT)
     SetTextureFilter(@tex_right, TEXTURE_FILTER_POINT)
 
     UnloadImage(img)
     UnloadImage(img_mirror)
   end
 
+  # ====================== INPUT ======================
   def handle_input
     return unless @can_move && !@moving
 
-    # Сброс флага "только что повернулся" в начале каждого кадра
     @just_turned = false
 
     if IsKeyDown(KEY_RIGHT)
@@ -84,19 +86,17 @@ end
   end
 
   def try_move_or_turn(dir)
-    # Если направление не совпадает – только поворачиваемся и ставим флаг
     if @direction != dir
       @direction = dir
       @just_turned = true
       return
     end
 
-    # Если только что повернулись – в этом кадре не начинать движение
     return if @just_turned
 
-    # Направление совпадает и нет блокировки – начинаем движение
     new_x = @x
     new_y = @y
+
     case dir
     when DIR_RIGHT then new_x += 1
     when DIR_LEFT  then new_x -= 1
@@ -122,6 +122,7 @@ end
     @move_offset = 0.0
   end
 
+  # ====================== UPDATE ======================
   def update_animation
     @anim_frame += 1
     if @anim_frame >= ANIM_SPEED
@@ -131,18 +132,18 @@ end
   end
 
   def update_movement
-    if @moving
-      @move_offset += @current_speed
-      if @move_offset >= 1.0
-        case @move_dir
-        when DIR_RIGHT then @x += 1
-        when DIR_LEFT  then @x -= 1
-        when DIR_DOWN  then @y += 1
-        when DIR_UP    then @y -= 1
-        end
-        @moving = false
-        @move_offset = 0.0
+    return unless @moving
+
+    @move_offset += @current_speed
+    if @move_offset >= 1.0
+      case @move_dir
+      when DIR_RIGHT then @x += 1
+      when DIR_LEFT  then @x -= 1
+      when DIR_DOWN  then @y += 1
+      when DIR_UP    then @y -= 1
       end
+      @moving = false
+      @move_offset = 0.0
     end
   end
 
@@ -151,38 +152,39 @@ end
     update_movement
   end
 
-def draw
-  px = (@x * TILE_SIZE).round
-  py = (@y * TILE_SIZE - 16).round
+  # ====================== DRAW ======================
+  def draw
+    px = (@x * TILE_SIZE).round
+    py = (@y * TILE_SIZE - 16).round
 
-  if @moving
-    offset = (@move_offset * TILE_SIZE).round
-    case @move_dir
-    when DIR_RIGHT then px += offset
-    when DIR_LEFT  then px -= offset
-    when DIR_DOWN  then py += offset
-    when DIR_UP    then py -= offset
+    if @moving
+      offset = (@move_offset * TILE_SIZE).round
+      case @move_dir
+      when DIR_RIGHT then px += offset
+      when DIR_LEFT  then px -= offset
+      when DIR_DOWN  then py += offset
+      when DIR_UP    then py -= offset
+      end
     end
+
+    texture = (@direction == DIR_RIGHT) ? @tex_right : @tex_left
+
+    row = case @direction
+          when DIR_UP    then 0
+          when DIR_LEFT, DIR_RIGHT then 1
+          else 2
+          end
+
+    @src_rect.x = @pattern * TILE_SIZE
+    @src_rect.y = row * TILE_SIZE
+
+    @dst_rect.x = px
+    @dst_rect.y = py
+
+    DrawTexturePro(texture, @src_rect, @dst_rect, @draw_origin, 0, WHITE)
   end
 
-  texture = (@direction == DIR_RIGHT) ? @tex_right : @tex_left
-
-  row = case @direction
-        when DIR_UP    then 0
-        when DIR_LEFT, DIR_RIGHT then 1
-        else 2
-        end
-
-  # Используем закешированные прямоугольники
-  @src_rect.x = @pattern * TILE_SIZE
-  @src_rect.y = row * TILE_SIZE
-
-  @dst_rect.x = px
-  @dst_rect.y = py
-
-  DrawTexturePro(texture, @src_rect, @dst_rect, @draw_origin, 0, WHITE)
-end
-
+  # ====================== VISUAL POSITION ======================
   def visual_x
     px = @x * TILE_SIZE
     px += @move_offset * TILE_SIZE if @moving && @move_dir == DIR_RIGHT
