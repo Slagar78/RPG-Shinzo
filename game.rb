@@ -111,6 +111,61 @@ class GameMap
     end
   end
 
+  # === НОВЫЕ МЕТОДЫ ДЛЯ ОТСЕЧЕНИЯ НЕВИДИМЫХ ТАЙЛОВ ===
+
+  def draw_visible(camera)
+    return unless @tileset_texture
+    # Определяем видимую область с небольшим запасом
+    screen_left   = ((camera.target.x - camera.offset.x) / @tile_size).floor - 1
+    screen_right  = ((camera.target.x + camera.offset.x) / @tile_size).ceil  + 1
+    screen_top    = ((camera.target.y - camera.offset.y) / @tile_size).floor - 1
+    screen_bottom = ((camera.target.y + camera.offset.y) / @tile_size).ceil  + 1
+
+    start_x = [0, screen_left].max
+    end_x   = [@width, screen_right].min
+    start_y = [0, screen_top].max
+    end_y   = [@height, screen_bottom].min
+
+    (start_x...end_x).each do |x|
+      (start_y...end_y).each do |y|
+        tile_id = @tiles[x][y]
+        next if tile_id.nil? || tile_id < 0
+        src = tile_src_rect(tile_id)
+        next unless src
+        dst = Rectangle.create(x * @tile_size, y * @tile_size, @tile_size, @tile_size)
+        DrawTexturePro(@tileset_texture, src, dst, Vector2.create(0, 0), 0, WHITE)
+      end
+    end
+  end
+
+  def draw_under_tiles_visible(camera)
+    return unless @tileset_texture
+    screen_left   = ((camera.target.x - camera.offset.x) / @tile_size).floor - 1
+    screen_right  = ((camera.target.x + camera.offset.x) / @tile_size).ceil  + 1
+    screen_top    = ((camera.target.y - camera.offset.y) / @tile_size).floor - 1
+    screen_bottom = ((camera.target.y + camera.offset.y) / @tile_size).ceil  + 1
+
+    start_x = [0, screen_left].max
+    end_x   = [@width, screen_right].min
+    start_y = [0, screen_top].max
+    end_y   = [@height, screen_bottom].min
+
+    (start_x...end_x).each do |x|
+      (start_y...end_y).each do |y|
+        tile_id = @tiles[x][y]
+        next if tile_id.nil? || tile_id < 0
+        type = @tile_types[tile_id] || 0
+        next unless type == 3
+        src = tile_src_rect(tile_id)
+        next unless src
+        dst = Rectangle.create(x * @tile_size, y * @tile_size, @tile_size, @tile_size)
+        DrawTexturePro(@tileset_texture, src, dst, Vector2.create(0, 0), 0, WHITE)
+      end
+    end
+  end
+
+  # === КОНЕЦ НОВЫХ МЕТОДОВ ===
+
   def passable?(x, y)
     return false if x < 0 || x >= @width || y < 0 || y >= @height
     tile_id = @tiles[x][y]
@@ -385,15 +440,28 @@ end
     end
   end
 
-  def draw
+def draw
     BeginDrawing()
     ClearBackground(RAYWHITE)
-    BeginMode2D(@camera)
-    @game_map.draw
+
+    # --- ИСПРАВЛЕНИЕ МИКРОФРИЗОВ ---
+    # Создаём новую камеру для отрисовки, у которой target всегда целый
+    snapped_camera = Camera2D.new
+    snapped_camera.zoom   = @camera.zoom
+    snapped_camera.offset = @camera.offset
+    snapped_camera.target = Vector2.create(
+      @camera.target.x.round,   # округляем до целых пикселей
+      @camera.target.y.round
+    )
+
+    # Рисуем карту и игрока с использованием ОКРУГЛЁННОЙ камеры
+    BeginMode2D(snapped_camera)
+    @game_map.draw_visible(snapped_camera)        # ← рисуем только видимые тайлы
     @player.draw
-    @game_map.draw_under_tiles
+    @game_map.draw_under_tiles_visible(snapped_camera)  # ← под тайлами тоже только видимые
     EndMode2D()
-	
+    # --------------------------------
+
     case @game_state
     when :menu
       @menu.draw
@@ -411,7 +479,7 @@ end
 
     DrawText("FPS: #{GetFPS()}", 576 - 100, 10, 20, DARKGRAY)
     EndDrawing()
-  end
+   end
 end
 
 Game.new.run if __FILE__ == $0
