@@ -428,7 +428,7 @@ end
     # Портрет и рамка
     if @portrait_tex
       portrait = (@blink_duration > 0 && @blink_tex) ? @blink_tex : @portrait_tex
-      dst = Raylib::Rectangle.create(@portrait_x + 2, @portrait_y + 2, 130, 204)
+      dst = Raylib::Rectangle.create(@portrait_x, @portrait_y, 134, 208)
       src = Raylib::Rectangle.create(0, 0, 134, 208)
       Raylib.DrawTexturePro(portrait, src, dst, origin, 0, Raylib::WHITE)
     end
