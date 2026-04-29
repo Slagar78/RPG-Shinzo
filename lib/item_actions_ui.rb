@@ -370,7 +370,7 @@ end
         @input_timer_down = 0
       end
 
-      if Raylib.IsKeyPressed(Raylib::KEY_R)
+      if Raylib.IsKeyPressed(Raylib::KEY_LEFT) || Raylib.IsKeyPressed(Raylib::KEY_RIGHT)
         @status_view_mode = 1 - @status_view_mode
       end
 
@@ -522,7 +522,11 @@ end
     if i == @selected_item_index && @focus == :items
       alpha = (Math.sin(@selection_blink_timer * 0.2) * 0.4 + 0.6) * 255
       color = Raylib.Fade(Raylib::GREEN, alpha / 255.0)
-      Raylib.DrawRectangleLines(ipos[:x] - 1, ipos[:y] - 1, 34, 50, color)
+          Raylib.DrawRectangleLinesEx(
+          Raylib::Rectangle.create(ipos[:x] - 1, ipos[:y] - 1, 34, 50),
+          2.0,    # толщина рамки в пикселях (можешь поставить 3.0, если хочешь ещё толще)
+          color
+        )
     end
   end
 end
