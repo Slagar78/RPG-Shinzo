@@ -696,17 +696,324 @@ end
     puts "Использован предмет #{item_entry["item"]} на #{actor["name"]}"
   end
 end
-
+# ============================================================
+# class GiveMenu
+# ============================================================
 class GiveMenu < ItemSubMenuBase
+  GIVE_MESSAGE_DURATION = 180   # 3 секунды
+
   def initialize(font, party, classes_data, class_names, start_inventory)
     super(:give, font, party, classes_data, class_names, start_inventory)
+    @give_state = :select_item
+    @give_message_timer = 0
+    @selected_give_item = nil
+    @give_selected_item_index = nil   # индекс слота дарителя
+    @donor_actor = nil
+    @donor_items = nil
+    @message_panel_tex = nil
+    load_give_textures
   end
 
+  def load_give_textures
+    @message_panel_tex = Raylib.LoadTexture("assets/ui/message_panel.png")
+    Raylib.SetTextureFilter(@message_panel_tex, 0) if @message_panel_tex
+  end
+
+  def open(actor_name = nil)
+    super
+    @give_state = :select_item
+    @give_message_timer = 0
+    @selected_give_item = nil
+    @give_selected_item_index = nil
+    @donor_actor = nil
+    @donor_items = nil
+    @focus = :party
+  end
+
+  # Убираем NOTHING из списка предметов дарителя
+  def filter_items(items)
+    items.reject { |entry| entry["item"] == "NOTHING" }
+  end
+
+  # ----------------------------------------------------------------
+  # Обработка ввода
+  # ----------------------------------------------------------------
+  def handle_input
+    case @give_state
+    when :select_item
+      super   # стандартный выбор предмета (без NOTHING)
+
+    when :show_message
+      # ничего не делаем
+
+    when :select_target
+      return unless @visible && @anim_phase == 2
+
+      # Отмена – вернуться к выбору предмета
+      if Raylib.IsKeyPressed(Raylib::KEY_S)
+        @give_state = :select_item
+        @focus = :party
+        return
+      end
+
+      # Выбор получателя (вверх/вниз) с автоповтором
+      if Raylib.IsKeyDown(Raylib::KEY_UP)
+        @input_timer_up += 1
+        if @input_timer_up == 1 || (@input_timer_up > 20 && (@input_timer_up - 20) % 5 == 0)
+          change_selected_actor(-1)
+        end
+      else
+        @input_timer_up = 0
+      end
+      if Raylib.IsKeyDown(Raylib::KEY_DOWN)
+        @input_timer_down += 1
+        if @input_timer_down == 1 || (@input_timer_down > 20 && (@input_timer_down - 20) % 5 == 0)
+          change_selected_actor(1)
+        end
+      else
+        @input_timer_down = 0
+      end
+
+      # Переключение режима просмотра (← / →)
+      if Raylib.IsKeyPressed(Raylib::KEY_LEFT) || Raylib.IsKeyPressed(Raylib::KEY_RIGHT)
+        max_modes = item_affects_attack_defense? ? 3 : 2
+        @status_view_mode = (@status_view_mode + 1) % max_modes
+      end
+
+      # Подтвердить передачу
+      if Raylib.IsKeyPressed(Raylib::KEY_A) || Raylib.IsKeyPressed(Raylib::KEY_D)
+        give_item_to(@party[@selected_actor_index])
+      end
+    end
+  end
+
+  # ----------------------------------------------------------------
+  # Обновление (сообщение и переход)
+  # ----------------------------------------------------------------
+  def update
+    super
+    case @give_state
+    when :show_message
+      if @visible == false && @anim_phase == 0
+        @give_message_timer += 1
+        if @give_message_timer >= GIVE_MESSAGE_DURATION
+          @give_state = :select_target
+          @give_message_timer = 0
+          open_target_selection
+        end
+      end
+    end
+  end
+
+  # Открыть окно для выбора цели
+  def open_target_selection
+    @visible = true
+    @anim_phase = 1
+    @upper_x = @upper_start_x
+    @lower_y = @lower_start_y
+    @portrait_x = @portrait_start_x
+    @frame_x = @frame_start_x
+    @focus = :party
+    @blink_timer = 0
+    @blink_duration = 0
+    # Загружаем портрет первого получателя
+    update_current_actor
+  end
+
+  # ----------------------------------------------------------------
+  # Отрисовка (без лишних панелей)
+  # ----------------------------------------------------------------
+  def draw
+    case @give_state
+    when :select_item then super
+    when :show_message then draw_message_only
+    when :select_target
+      super   # рисуем стандартное окно (верхняя панель = инвентарь текущего персонажа)
+    end
+  end
+
+  # ----------------------------------------------------------------
+  # КАСТОМНАЯ ВЕРХНЯЯ ПАНЕЛЬ: рисуем красный квадрат только если выбран даритель
+  # ----------------------------------------------------------------
+  def draw_upper_content
+    super   # сначала обычная отрисовка предметов получателя
+    # Если идёт выбор цели и текущий персонаж – даритель, подсвечиваем его предмет
+    if @give_state == :select_target && @donor_actor && @donor_items
+      if @party[@selected_actor_index] == @donor_actor
+        idx = @give_selected_item_index
+        return unless idx && idx >= 0 && @donor_items[idx]
+        return if @donor_items[idx]["item"] == "NOTHING"
+
+        base_x = @upper_x + 40
+        base_y = @upper_y + 60
+        offset_x = 44
+        offset_y = 42
+        positions = [
+          { x: base_x + offset_x, y: base_y + 8 },
+          { x: base_x,            y: base_y + offset_y },
+          { x: base_x + offset_x * 2, y: base_y + offset_y },
+          { x: base_x + offset_x, y: base_y + offset_y * 2 - 8 }
+        ]
+        pos = positions[idx]
+        alpha = (Math.sin(@selection_blink_timer * 0.2) * 0.4 + 0.6) * 180
+        color = Raylib.Fade(Raylib::RED, alpha / 255.0)
+        Raylib.DrawRectangle(pos[:x], pos[:y], 32, 48, color)
+      end
+    end
+  end
+
+  # ----------------------------------------------------------------
+  # Окно сообщения "Pass the ... to whom?"
+  # ----------------------------------------------------------------
+  def draw_message_only
+    panel_x = (576 - 480) / 2
+    panel_y = 480 - 128 - 24
+
+    if @message_panel_tex
+      dst = Raylib::Rectangle.create(panel_x, panel_y, 480, 128)
+      Raylib.DrawTexturePro(@message_panel_tex,
+        Raylib::Rectangle.create(0, 0, 480, 128), dst,
+        Raylib::Vector2.create(0, 0), 0, Raylib::WHITE)
+    else
+      Raylib.DrawRectangle(panel_x, panel_y, 480, 128, Raylib::GRAY)
+      Raylib.DrawRectangleLines(panel_x, panel_y, 480, 128, Raylib::DARKGRAY)
+    end
+
+    draw_text_custom("Pass the", panel_x + 40, panel_y + 30, 20, WHITE)
+    item_name = @selected_give_item ? @selected_give_item["item"] : "item"
+    draw_item_name(item_name, panel_x + 40, panel_y + 58, 20, WHITE)
+    draw_text_custom("to whom?", panel_x + 40, panel_y + 86, 20, WHITE)
+  end
+
+  # ----------------------------------------------------------------
+  # Влияет ли предмет на атаку/защиту (для третьего режима)
+  # ----------------------------------------------------------------
+  def item_affects_attack_defense?
+    return false unless @selected_give_item
+    item_data = find_item_by_name(@selected_give_item["item"])
+    return false unless item_data
+    item_data["type"] == "weapon" || item_data["type"] == "armor" || item_data["type"] == "ring" || item_data["type"] == "helm"
+  end
+
+  # ----------------------------------------------------------------
+  # Передача предмета получателю
+  # ----------------------------------------------------------------
+  def give_item_to(actor)
+    return unless @selected_give_item && actor
+
+    target_items = find_actor_items(actor["name"])
+    empty_slot = target_items.index { |entry| entry.nil? || entry["item"] == "NOTHING" }
+    unless empty_slot
+      # Пока без сообщения, просто не закрываем окно
+      return
+    end
+
+    donor = @donor_actor
+    if donor
+      donor_items = find_actor_items(donor["name"])
+      idx = donor_items.index { |entry| entry && entry["item"] == @selected_give_item["item"] }
+      if idx
+        donor_items[idx] = { "item" => "NOTHING", "equipped" => false }
+        donor_inv = @start_inventory.find { |inv| inv["actor_id"] == donor["id"] }
+        donor_inv["items"] = donor_items if donor_inv
+      end
+    end
+
+    target_items[empty_slot] = @selected_give_item.dup
+    target_inv = @start_inventory.find { |inv| inv["actor_id"] == actor["id"] }
+    if target_inv
+      target_inv["items"] = target_items
+    end
+
+    close
+  end
+
+  # ----------------------------------------------------------------
+  # Нижняя панель (ATTACK/DEFENSE для третьего режима)
+  # ----------------------------------------------------------------
+  def draw_lower_content
+    if @give_state == :select_target && @status_view_mode == 2
+      header_y = @lower_y + 28
+      draw_text_custom("Имя",    @lower_x + 44,  header_y, 20, WHITE)
+      draw_text_custom("ATTACK",  @lower_x + 187, header_y, 20, WHITE)
+      draw_text_custom("DEFENSE", @lower_x + 290, header_y, 20, WHITE)
+
+      5.times do |i|
+        list_index = @list_top_index + i
+        break if list_index >= @party.length
+        member = @party[list_index]
+        y = @lower_y + 71 + i * 34
+
+        if member["name"] == @current_actor
+          highlight = Raylib.Fade(Raylib::BLUE, 0.5)
+          Raylib.DrawRectangle(@lower_x + 38, y - 4, 138, 28, highlight)
+        end
+
+        if @ruby_tex
+          ruby_src = Raylib::Rectangle.create(0, 0, @ruby_tex.width, @ruby_tex.height)
+          ruby_dst = Raylib::Rectangle.create(@lower_x + 15, y - 3, 24, 24)
+          Raylib.DrawTexturePro(@ruby_tex, ruby_src, ruby_dst,
+                                Raylib::Vector2.create(0, 0), 0, Raylib::WHITE)
+        end
+
+        name_display = member["name"].slice(0, 10)
+        draw_text_custom(name_display, @lower_x + 44, y, 18, WHITE)
+
+        klass = @classes_data.find { |c| c["id"] == member["class_id"] }
+        atk = klass ? (klass.dig("attack_growth", "start") || 0) : 0
+        df  = klass ? (klass.dig("defense_growth", "start") || 0) : 0
+        draw_text_centered_h(atk.to_s, @lower_x + 220, y, 18, WHITE)
+        draw_text_centered_h(df.to_s,  @lower_x + 330, y, 18, WHITE)
+      end
+
+      # стрелки прокрутки
+      if @list_top_index > 0
+        alpha = (Math.sin(@selection_blink_timer * 0.2) * 0.4 + 0.6) * 255
+        color = Raylib.Fade(Raylib::WHITE, alpha / 255.0)
+        ax = @lower_x + 27
+        ay = @lower_y + 71 + 12
+        Raylib.DrawTriangle(
+          Raylib::Vector2.create(ax, ay - 6),
+          Raylib::Vector2.create(ax - 6, ay + 4),
+          Raylib::Vector2.create(ax + 6, ay + 4),
+          color
+        )
+      end
+      if @list_top_index + 5 < @party.length
+        alpha = (Math.sin(@selection_blink_timer * 0.2) * 0.4 + 0.6) * 255
+        color = Raylib.Fade(Raylib::WHITE, alpha / 255.0)
+        ax = @lower_x + 27
+        ay = @lower_y + 71 + 4*34 + 12
+        Raylib.DrawTriangle(
+          Raylib::Vector2.create(ax - 6, ay - 4),
+          Raylib::Vector2.create(ax, ay + 6),
+          Raylib::Vector2.create(ax + 6, ay - 4),
+          color
+        )
+      end
+    else
+      super
+    end
+  end
+
+  # ----------------------------------------------------------------
+  # Подтверждение выбора предмета (запоминаем дарителя)
+  # ----------------------------------------------------------------
   def confirm_action(item_entry, actor)
-    puts "Передаём предмет #{item_entry["item"]} от #{actor["name"]} -> выбор цели"
+    return if item_entry["item"] == "NOTHING"
+
+    @selected_give_item = item_entry
+    @give_selected_item_index = @selected_item_index   # слот в инвентаре дарителя
+    @donor_actor = actor
+    @donor_items = @current_items.dup                  # копируем инвентарь дарителя
+    @give_state = :show_message
+    force_close
   end
 end
 
+ # ----------------------------------------------------------------
+ # class DropMenu
+ # ----------------------------------------------------------------
 class DropMenu < ItemSubMenuBase
   def initialize(font, party, classes_data, class_names, start_inventory)
     super(:drop, font, party, classes_data, class_names, start_inventory)

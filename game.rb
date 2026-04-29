@@ -274,7 +274,8 @@ class Game
 
     # Предметные подменю
     @use_menu = UseMenu.new(@font, @party, @classes_data, @class_names, @start_inventory)
-    # Позже добавятся GiveMenu, EquipMenu, DropMenu
+	@give_menu = GiveMenu.new(@font, @party, @classes_data, @class_names, @start_inventory)
+    # Позже добавятся  EquipMenu, DropMenu
 
     # ── Статусный оверлей (с кастомным шрифтом) ─
     @status_overlay = StatusOverlay.new(@font)
@@ -370,11 +371,15 @@ def handle_input
     elsif IsKeyPressed(KEY_A) || IsKeyPressed(KEY_D)
       unless @pending_items_close
         case @items_submenu.selected_index
+
         when 0   # Use
           @use_menu.open
           @active_item_action = @use_menu
           @game_state = :item_action
-        # when 1 # Give
+        when 1   # Give
+          @give_menu.open
+          @active_item_action = @give_menu
+          @game_state = :item_action
         # when 2 # Equip
         # when 3 # Drop
         end
