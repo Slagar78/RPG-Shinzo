@@ -21,28 +21,35 @@ class Player
   attr_accessor :map
 
   def initialize(map = nil)
-    @map = map
-    if @map
-      @x = @map.width / 2
-      @y = @map.height / 2
-    else
-      @x = 6
-      @y = 5
-    end
-    @direction = DIR_DOWN
-    @pattern = 0
-    @moving = false
-    @move_dir = DIR_DOWN
-    @move_offset = 0.0
-    @anim_frame = 0
-    @can_move = true
-    @current_speed = MOVE_SPEED
-    @just_turned = false   # Флаг: только что повернулся – не начинать движение в этом кадре
-    load_textures
-	@src_rect = Rectangle.create(0, 0, TILE_SIZE, TILE_SIZE)
-    @dst_rect = Rectangle.create(0, 0, TILE_SIZE, TILE_SIZE)
-    @draw_origin = Vector2.create(0, 0)
+  @map = map
+
+  if @map
+    @x = @map.width / 2
+    @y = @map.height / 2
+  else
+    @x = 6
+    @y = 5
   end
+
+  @direction     = DIR_DOWN
+  @pattern       = 0
+  @moving        = false
+  @move_dir      = DIR_DOWN
+  @move_offset   = 0.0
+  @anim_frame    = 0
+  @can_move      = true
+  @current_speed = MOVE_SPEED
+  @just_turned   = false
+
+  init_render_objects   # ← отдельный метод
+  load_textures
+end
+
+def init_render_objects
+  @src_rect    = Rectangle.create(0, 0, TILE_SIZE, TILE_SIZE)
+  @dst_rect    = Rectangle.create(0, 0, TILE_SIZE, TILE_SIZE)
+  @draw_origin = Vector2.create(0, 0)
+end
 
   def load_textures
     img = LoadImage("assets/mapsprites/hero.png")
@@ -180,13 +187,13 @@ end
     px = @x * TILE_SIZE
     px += @move_offset * TILE_SIZE if @moving && @move_dir == DIR_RIGHT
     px -= @move_offset * TILE_SIZE if @moving && @move_dir == DIR_LEFT
-    px
+    px.round
   end
 
   def visual_y
     py = @y * TILE_SIZE
     py += @move_offset * TILE_SIZE if @moving && @move_dir == DIR_DOWN
     py -= @move_offset * TILE_SIZE if @moving && @move_dir == DIR_UP
-    py
+    py.round
   end
 end
