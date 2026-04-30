@@ -55,7 +55,7 @@ static int save_timer = 0;
 #define SAVE_BLINK_DURATION 90
 static int class_scroll = 0;
 
-#define MAX_CLASS_FIELDS 20
+#define MAX_CLASS_FIELDS 30
 typedef struct {
     char text[256];
     int cursor;
@@ -63,13 +63,14 @@ typedef struct {
     int is_numeric;
     int max_len;
     SDL_Rect rect;
-    int field_id;
+    int field_id;       // ID поля (для сохранения)
+    int is_curve;       // 1 = кривая (не редактируется)
 } ClassField;
 static ClassField class_fields[MAX_CLASS_FIELDS];
 static int class_field_count = 0;
 static int class_active_field = -1;
 
-static int last_btn_y = 0;   // для синхронизации с обработчиком
+static int last_btn_y = 0;
 
 // Прототипы
 static void build_curve_list(void);
@@ -83,7 +84,6 @@ static void draw_class_field(SDL_Renderer *r, int x, int y, int w, int h, int id
 static void add_new_class(void);
 static void delete_class(void);
 
-// ----------------------------------------------------------------
 static void build_curve_list(void) {
     curve_count = 0;
     extern cJSON *curves_json;
@@ -207,45 +207,54 @@ static void load_class_fields(void) {
 static void open_class_fields(void) {
     class_field_count = 0;
     class_active_field = -1;
-    int base_x = 360, base_y = 80, off = 50;
+    int base_x = 360, base_y = 80, off = 60;   // сдвиг влево
 
+    // 0 Name
     snprintf(class_fields[0].text, sizeof(class_fields[0].text), "%s", name_buf);
     class_fields[0].cursor = strlen(class_fields[0].text);
-    class_fields[0].active = 0; class_fields[0].is_numeric = 0; class_fields[0].max_len = 10; class_fields[0].field_id = 0;
+    class_fields[0].active = 0; class_fields[0].is_numeric = 0; class_fields[0].max_len = 10; class_fields[0].field_id = 0; class_fields[0].is_curve = 0;
     class_fields[0].rect = (SDL_Rect){base_x+off, base_y + 0*35, 150, 22};
 
+    // 1 Full Name
     snprintf(class_fields[1].text, sizeof(class_fields[1].text), "%s", full_name_buf);
     class_fields[1].cursor = strlen(class_fields[1].text);
-    class_fields[1].active = 0; class_fields[1].is_numeric = 0; class_fields[1].max_len = 16; class_fields[1].field_id = 1;
+    class_fields[1].active = 0; class_fields[1].is_numeric = 0; class_fields[1].max_len = 16; class_fields[1].field_id = 1; class_fields[1].is_curve = 0;
     class_fields[1].rect = (SDL_Rect){base_x+off, base_y + 1*35, 150, 22};
 
+    // 2 Move
     snprintf(class_fields[2].text, sizeof(class_fields[2].text), "%d", move_val);
     class_fields[2].cursor = strlen(class_fields[2].text);
-    class_fields[2].active = 0; class_fields[2].is_numeric = 1; class_fields[2].max_len = 3; class_fields[2].field_id = 2;
+    class_fields[2].active = 0; class_fields[2].is_numeric = 1; class_fields[2].max_len = 3; class_fields[2].field_id = 2; class_fields[2].is_curve = 0;
     class_fields[2].rect = (SDL_Rect){base_x+off, base_y + 2*35, 150, 22};
 
-    snprintf(class_fields[3].text, sizeof(class_fields[3].text), "%s", move_type_buf);
-    class_fields[3].cursor = 0; class_fields[3].active = 0; class_fields[3].is_numeric = 0; class_fields[3].max_len = 0; class_fields[3].field_id = 3;
-    class_fields[3].rect = (SDL_Rect){base_x+off, base_y + 3*35, 150, 22};
+    // Move Type (только просмотр, не поле ввода) – пропускаем
 
-    int idx = 4;
+    // Блоки роста (начиная с y = base_y + 3*35 (после move type))
+    int idx = 3;   // продолжим с индекса 3
+    int y_start = 3; // строка для первого роста
     for (int s = 0; s < 5; s++) {
+        // Start
         snprintf(class_fields[idx].text, sizeof(class_fields[idx].text), "%d", growth[s].start);
         class_fields[idx].cursor = strlen(class_fields[idx].text);
         class_fields[idx].active = 0; class_fields[idx].is_numeric = 1; class_fields[idx].max_len = 5;
-        class_fields[idx].field_id = 100 + s*3 + 0;
-        class_fields[idx].rect = (SDL_Rect){base_x+off, base_y + (4 + s)*35, 150, 22};
+        class_fields[idx].field_id = 100 + s*2;   // start
+        class_fields[idx].is_curve = 0;
+        class_fields[idx].rect = (SDL_Rect){base_x+off, base_y + (y_start + s)*35, 150, 22};
         idx++;
+        // Projected
         snprintf(class_fields[idx].text, sizeof(class_fields[idx].text), "%d", growth[s].projected);
         class_fields[idx].cursor = strlen(class_fields[idx].text);
         class_fields[idx].active = 0; class_fields[idx].is_numeric = 1; class_fields[idx].max_len = 5;
-        class_fields[idx].field_id = 100 + s*3 + 1;
-        class_fields[idx].rect = (SDL_Rect){base_x+off+160, base_y + (4 + s)*35, 150, 22};
+        class_fields[idx].field_id = 100 + s*2 + 1; // projected
+        class_fields[idx].is_curve = 0;
+        class_fields[idx].rect = (SDL_Rect){base_x+off+160, base_y + (y_start + s)*35, 150, 22};
         idx++;
+        // Curve (фиктивное нередактируемое поле для отрисовки)
         snprintf(class_fields[idx].text, sizeof(class_fields[idx].text), "%s", growth[s].curve);
         class_fields[idx].cursor = 0; class_fields[idx].active = 0; class_fields[idx].is_numeric = 0; class_fields[idx].max_len = 0;
         class_fields[idx].field_id = 200 + s;
-        class_fields[idx].rect = (SDL_Rect){base_x+off+320, base_y + (4 + s)*35, 150, 22};
+        class_fields[idx].is_curve = 1;
+        class_fields[idx].rect = (SDL_Rect){base_x+off+320, base_y + (y_start + s)*35, 150, 22};
         idx++;
     }
     class_field_count = idx;
@@ -254,22 +263,17 @@ static void open_class_fields(void) {
 static void commit_class_field(int idx) {
     if (idx < 0 || idx >= class_field_count) return;
     ClassField *f = &class_fields[idx];
+    if (f->is_curve) return;
     int id = f->field_id;
     if (id < 100) {
         if (id == 0) { strncpy(name_buf, f->text, 10); name_buf[10] = '\0'; }
         else if (id == 1) { strncpy(full_name_buf, f->text, 16); full_name_buf[16] = '\0'; }
         else if (id == 2) move_val = atoi(f->text);
-        else if (id == 3) { strncpy(move_type_buf, f->text, 31); move_type_buf[31] = '\0'; }
     } else if (id >= 100 && id < 200) {
-        int stat = (id - 100) / 3;
-        int field = (id - 100) % 3;
-        if (field == 0) growth[stat].start = atoi(f->text);
-        else if (field == 1) growth[stat].projected = atoi(f->text);
-    } else if (id >= 200) {
-        int stat = id - 200;
-        strncpy(growth[stat].curve, f->text, 63);
-        for (int j = 0; j < curve_count; j++)
-            if (strcmp(curve_names[j], growth[stat].curve) == 0) { selected_curve_idx[stat] = j; break; }
+        int stat = (id - 100) / 2;
+        int is_proj = (id - 100) % 2;
+        if (!is_proj) growth[stat].start = atoi(f->text);
+        else growth[stat].projected = atoi(f->text);
     }
     f->active = 0;
 }
@@ -277,23 +281,23 @@ static void commit_class_field(int idx) {
 static int handle_class_input(SDL_Event *evt, int idx) {
     ClassField *f = &class_fields[idx];
     SDL_Rect r = f->rect;
-    int is_curve = (f->field_id >= 200);
+    if (f->is_curve) return 0;   // кривые управляются кнопками
+
     if (evt->type == SDL_MOUSEBUTTONDOWN && evt->button.button == SDL_BUTTON_LEFT) {
         int mx = evt->button.x, my = evt->button.y;
         if (mx >= r.x && mx < r.x+r.w && my >= r.y && my < r.y+r.h) {
-            if (!is_curve) {
-                if (class_active_field >= 0 && class_active_field != idx) commit_class_field(class_active_field);
-                class_active_field = idx;
-                f->active = 1;
-                f->cursor = strlen(f->text);
-            }
+            if (class_active_field >= 0 && class_active_field != idx) commit_class_field(class_active_field);
+            class_active_field = idx;
+            f->active = 1;
+            f->cursor = strlen(f->text);
             return 1;
         }
-        if (f->active && !is_curve) {
+        // автопереход (только для обычных полей)
+        if (f->active) {
             commit_class_field(idx);
             int best = -1, bestDist = 1000;
             for (int i = 0; i < class_field_count; i++) {
-                if (class_fields[i].field_id >= 200) continue;
+                if (class_fields[i].is_curve) continue;
                 SDL_Rect fr = class_fields[i].rect;
                 int cy = fr.y + fr.h/2;
                 int dist = abs(my - cy);
@@ -308,7 +312,7 @@ static int handle_class_input(SDL_Event *evt, int idx) {
         } else {
             int best = -1, bestDist = 1000;
             for (int i = 0; i < class_field_count; i++) {
-                if (class_fields[i].field_id >= 200) continue;
+                if (class_fields[i].is_curve) continue;
                 SDL_Rect fr = class_fields[i].rect;
                 int cy = fr.y + fr.h/2;
                 int dist = abs(my - cy);
@@ -322,12 +326,12 @@ static int handle_class_input(SDL_Event *evt, int idx) {
                 return 1;
             }
         }
-    } else if (evt->type == SDL_KEYDOWN && f->active && !is_curve) {
+    } else if (evt->type == SDL_KEYDOWN && f->active) {
         if (evt->key.keysym.sym == SDLK_UP) {
             if (idx == 0) return 1;
             commit_class_field(idx);
             int new_idx = idx - 1;
-            while (new_idx >= 0 && class_fields[new_idx].field_id >= 200) new_idx--;
+            while (new_idx >= 0 && class_fields[new_idx].is_curve) new_idx--;
             if (new_idx >= 0) {
                 class_fields[new_idx].active = 1;
                 class_fields[new_idx].cursor = strlen(class_fields[new_idx].text);
@@ -337,7 +341,7 @@ static int handle_class_input(SDL_Event *evt, int idx) {
         } else if (evt->key.keysym.sym == SDLK_DOWN) {
             commit_class_field(idx);
             int new_idx = idx + 1;
-            while (new_idx < class_field_count && class_fields[new_idx].field_id >= 200) new_idx++;
+            while (new_idx < class_field_count && class_fields[new_idx].is_curve) new_idx++;
             if (new_idx < class_field_count) {
                 class_fields[new_idx].active = 1;
                 class_fields[new_idx].cursor = strlen(class_fields[new_idx].text);
@@ -355,7 +359,7 @@ static int handle_class_input(SDL_Event *evt, int idx) {
             return 1;
         } else if (evt->key.keysym.sym == SDLK_LEFT && f->cursor > 0) { f->cursor--; return 1; }
         else if (evt->key.keysym.sym == SDLK_RIGHT && f->cursor < strlen(f->text)) { f->cursor++; return 1; }
-    } else if (evt->type == SDL_TEXTINPUT && f->active && !is_curve) {
+    } else if (evt->type == SDL_TEXTINPUT && f->active) {
         char ch = evt->text.text[0];
         if (f->is_numeric) {
             if (isdigit(ch) || (ch == '-' && f->cursor == 0 && f->text[0] == '\0')) {
@@ -380,7 +384,7 @@ static int handle_class_input(SDL_Event *evt, int idx) {
 static void draw_class_field(SDL_Renderer *r, int x, int y, int w, int h, int idx, const char *label, const char *display) {
     SDL_Color white = {255,255,255}, black = {0,0,0}, gray = {100,100,100};
     draw_text_ext(r, x, y + 3, label, white);
-    int fx = x + 50;
+    int fx = x + 60;   // сдвиг поля влево
     SDL_Rect rect = {fx, y, w, h};
     SDL_SetRenderDrawColor(r, gray.r, gray.g, gray.b, 255); SDL_RenderFillRect(r, &rect);
     SDL_SetRenderDrawColor(r, white.r, white.g, white.b, 255); SDL_RenderDrawRect(r, &rect);
@@ -400,78 +404,6 @@ static void draw_class_field(SDL_Renderer *r, int x, int y, int w, int h, int id
 }
 
 // ------------------------------------------------------------
-// Публичные функции
-// ------------------------------------------------------------
-
-void classes_init(cJSON *json_array, int count) {
-    classes = json_array;
-    class_count = count;
-    selected_class = -1;
-    class_scroll = 0;
-    save_timer = 0;
-    build_curve_list();
-    build_spell_name_list();
-    class_field_count = 0;
-    class_active_field = -1;
-    if (class_count > 0) { selected_class = 0; load_class_fields(); }
-}
-
-void classes_save_to_file(void) {
-    if (!classes) return;
-    cJSON *root = cJSON_CreateObject();
-    cJSON *dup = cJSON_Duplicate(classes, 1);
-    cJSON_AddItemToObject(root, "classes", dup);
-    char *js = cJSON_PrintBuffered(root, 0, 1);
-    FILE *f = fopen("../data/actors/classes.json", "w");
-    if (f) { fputs(js, f); fclose(f); error_msg[0] = '\0'; }
-    else snprintf(error_msg, sizeof(error_msg), "Failed to save classes.json");
-    free(js); cJSON_Delete(root);
-    save_timer = SAVE_BLINK_DURATION;
-}
-
-int classes_is_edit_active(void) { return class_active_field >= 0; }
-void classes_reset_selection(void) {
-    if (class_count > 0) { selected_class = 0; load_class_fields(); }
-    else { selected_class = -1; class_active_field = -1; class_field_count = 0; }
-}
-void classes_adjust_scroll(int delta) { class_scroll -= delta; }
-int classes_get_scroll(void) { return class_scroll; }
-
-void classes_draw_list(SDL_Renderer *renderer, int y_offset, int scroll) {
-    if (!classes) return;
-    int y = y_offset - scroll;
-    SDL_Color white = {255,255,255};
-    for (int i = 0; i < class_count; i++) {
-        if (y + 20 < y_offset || y > y_offset + 600) { y += 20; continue; }
-        cJSON *cls = cJSON_GetArrayItem(classes, i);
-        int id = cJSON_GetObjectItem(cls, "id")->valueint;
-        const char *nm = cJSON_GetObjectItem(cls, "name")->valuestring;
-        char buf[256];
-        snprintf(buf, sizeof(buf), "%d: %s", id, nm);
-        SDL_Rect rr = {10, y, 290, 20};
-        if (i == selected_class) { SDL_SetRenderDrawColor(renderer, 100,100,255,128); SDL_RenderFillRect(renderer, &rr); }
-        draw_text_ext(renderer, 10, y, buf, white);
-        y += 20;
-    }
-}
-
-int classes_get_total_height(void) { return class_count * 20; }
-
-void classes_handle_click(int mx, int my, int y_offset, int scroll) {
-    int y = y_offset - scroll;
-    for (int i = 0; i < class_count; i++) {
-        if (mx >= 10 && mx < 300 && my >= y && my < y+20) {
-            if (selected_class != i) {
-                if (selected_class >= 0) commit_class_changes();
-                selected_class = i;
-                load_class_fields();
-            }
-            return;
-        }
-        y += 20;
-    }
-}
-
 void classes_draw_edit_panel(SDL_Renderer *renderer, int px, int py) {
     if (selected_class < 0) return;
     SDL_Color black = {0,0,0,255}, white = {255,255,255}, gray = {100,100,100}, blue = {70,70,120};
@@ -480,49 +412,45 @@ void classes_draw_edit_panel(SDL_Renderer *renderer, int px, int py) {
     SDL_SetRenderDrawColor(renderer, 255,255,255,255); SDL_RenderDrawRect(renderer, &panel);
 
     int y = py + 10;
-
+    // Name + ID
     cJSON *cls = cJSON_GetArrayItem(classes, selected_class);
-    int actor_id = cJSON_GetObjectItem(cls, "id")->valueint;
-    char idstr[16]; snprintf(idstr, sizeof(idstr), "ID:%d", actor_id);
-    draw_text_ext(renderer, px+240, y+3, idstr, white);
+    int cid = cJSON_GetObjectItem(cls, "id")->valueint;
+    char idstr[16]; snprintf(idstr, sizeof(idstr), "ID:%d", cid);
+    draw_text_ext(renderer, px+230, y+3, idstr, white);
     draw_class_field(renderer, px+10, y, 150, 22, 0, "Name:", name_buf);
     y += 35;
-
     draw_class_field(renderer, px+10, y, 150, 22, 1, "Full Name:", full_name_buf);
     y += 35;
-
     char mvstr[8]; snprintf(mvstr, sizeof(mvstr), "%d", move_val);
     draw_class_field(renderer, px+10, y, 150, 22, 2, "Move:", mvstr);
     y += 35;
-
     draw_text_ext(renderer, px+10, y+3, "Move Type:", white);
     draw_text_ext(renderer, px+110, y+3, move_type_buf, white);
     y += 35;
 
+    // Блоки роста
     for (int s = 0; s < 5; s++) {
         char start_str[8], proj_str[8];
         snprintf(start_str, sizeof(start_str), "%d", growth[s].start);
         snprintf(proj_str, sizeof(proj_str), "%d", growth[s].projected);
-        int base_idx = 4 + s*3;
+        int base_idx = 3 + s*3;   // индексы полей
         draw_text_ext(renderer, px+10, y+3, growth_names[s], white);
-        draw_class_field(renderer, px+90, y, 70, 22, base_idx, "St:", start_str);
-        draw_class_field(renderer, px+260, y, 80, 22, base_idx+1, "Pr:", proj_str);
-        draw_text_ext(renderer, px+360, y+3, "Curve:", white);
-        SDL_Rect cr = {px+420, y, 100, 22};
-        SDL_SetRenderDrawColor(renderer, gray.r, gray.g, gray.b, 255); SDL_RenderFillRect(renderer, &cr);
-        SDL_SetRenderDrawColor(renderer, white.r, white.g, white.b, 255); SDL_RenderDrawRect(renderer, &cr);
-        draw_text_ext(renderer, px+425, y+3, growth[s].curve, black);
-        SDL_Rect prev = {px+525, y, 20, 22};
+        draw_class_field(renderer, px+80, y, 70, 22, base_idx, "Start", start_str);      // без St:
+        draw_class_field(renderer, px+220, y, 80, 22, base_idx+1, "Projected", proj_str); // без Pr:
+        // Curve (имя кривой и кнопки)
+        draw_text_ext(renderer, px+380, y+3, growth[s].curve, white);
+        SDL_Rect prev = {px+480, y, 20, 22};
         SDL_SetRenderDrawColor(renderer, blue.r, blue.g, blue.b, 255); SDL_RenderFillRect(renderer, &prev);
         SDL_SetRenderDrawColor(renderer, white.r, white.g, white.b, 255); SDL_RenderDrawRect(renderer, &prev);
-        draw_text_ext(renderer, px+530, y+3, "<", white);
-        SDL_Rect next = {px+550, y, 20, 22};
+        draw_text_ext(renderer, px+485, y+3, "<", white);
+        SDL_Rect next = {px+505, y, 20, 22};
         SDL_SetRenderDrawColor(renderer, blue.r, blue.g, blue.b, 255); SDL_RenderFillRect(renderer, &next);
         SDL_SetRenderDrawColor(renderer, white.r, white.g, white.b, 255); SDL_RenderDrawRect(renderer, &next);
-        draw_text_ext(renderer, px+555, y+3, ">", white);
+        draw_text_ext(renderer, px+510, y+3, ">", white);
         y += 35;
     }
 
+    // Spell List
     y += 10;
     draw_text_ext(renderer, px+10, y, "Spell List:", white);
     y += 20;
@@ -587,9 +515,10 @@ void classes_handle_input(SDL_Event *evt) {
         int px = 360, py = 50;
         int base_y = py + 10;
 
+        // Кнопки кривых
         for (int s = 0; s < 5; s++) {
-            SDL_Rect prev = {px+525, base_y + (4+s)*35, 20, 22};
-            SDL_Rect next = {px+550, base_y + (4+s)*35, 20, 22};
+            SDL_Rect prev = {px+480, base_y + 3*35 + s*35, 20, 22}; // координаты сдвинуты
+            SDL_Rect next = {px+505, base_y + 3*35 + s*35, 20, 22};
             if (mx >= prev.x && mx < prev.x+prev.w && my >= prev.y && my < prev.y+prev.h) {
                 if (curve_count > 0 && selected_curve_idx[s] > 0) {
                     selected_curve_idx[s]--;
@@ -608,8 +537,9 @@ void classes_handle_input(SDL_Event *evt) {
             }
         }
 
-        int y_spell_header = base_y + 4*35 + 5*35 + 10;
-        int list_y = y_spell_header + 20;
+        // Spell list
+        int y_spell = base_y + 3*35 + 5*35 + 10;
+        int list_y = y_spell + 20;
         for (int i = 0; i < class_spell_count; i++) {
             SDL_Rect item = {px+20, list_y + i*20, 400, 20};
             if (mx >= item.x && mx < item.x+item.w && my >= item.y && my < item.y+item.h) {
@@ -642,6 +572,7 @@ void classes_handle_input(SDL_Event *evt) {
             }
         }
 
+        // Кнопки Save/Refresh/Add/Del
         int btn_y = last_btn_y;
         SDL_Rect save_btn = {px+130, btn_y, 80, 30};
         SDL_Rect refresh_btn = {px+220, btn_y, 80, 30};
@@ -747,6 +678,70 @@ void classes_reload(void) {
     }
 }
 
-void classes_update_timer(void) {
-    if (save_timer > 0) save_timer--;
+// Публичные функции
+void classes_init(cJSON *json_array, int count) {
+    classes = json_array;
+    class_count = count;
+    selected_class = -1;
+    class_scroll = 0;
+    save_timer = 0;
+    build_curve_list();
+    build_spell_name_list();
+    class_field_count = 0;
+    class_active_field = -1;
+    if (class_count > 0) { selected_class = 0; load_class_fields(); }
 }
+
+void classes_save_to_file(void) {
+    if (!classes) return;
+    cJSON *root = cJSON_CreateObject();
+    cJSON *dup = cJSON_Duplicate(classes, 1);
+    cJSON_AddItemToObject(root, "classes", dup);
+    char *js = cJSON_PrintBuffered(root, 0, 1);
+    FILE *f = fopen("../data/actors/classes.json", "w");
+    if (f) { fputs(js, f); fclose(f); error_msg[0] = '\0'; }
+    else snprintf(error_msg, sizeof(error_msg), "Failed to save classes.json");
+    free(js); cJSON_Delete(root);
+    save_timer = SAVE_BLINK_DURATION;
+}
+
+int classes_is_edit_active(void) { return class_active_field >= 0; }
+void classes_reset_selection(void) {
+    if (class_count > 0) { selected_class = 0; load_class_fields(); }
+    else { selected_class = -1; class_active_field = -1; class_field_count = 0; }
+}
+void classes_adjust_scroll(int delta) { class_scroll -= delta; }
+int classes_get_scroll(void) { return class_scroll; }
+void classes_draw_list(SDL_Renderer *renderer, int y_offset, int scroll) {
+    if (!classes) return;
+    int y = y_offset - scroll;
+    SDL_Color white = {255,255,255};
+    for (int i = 0; i < class_count; i++) {
+        if (y + 20 < y_offset || y > y_offset + 600) { y += 20; continue; }
+        cJSON *cls = cJSON_GetArrayItem(classes, i);
+        int id = cJSON_GetObjectItem(cls, "id")->valueint;
+        const char *nm = cJSON_GetObjectItem(cls, "name")->valuestring;
+        char buf[256];
+        snprintf(buf, sizeof(buf), "%d: %s", id, nm);
+        SDL_Rect rr = {10, y, 290, 20};
+        if (i == selected_class) { SDL_SetRenderDrawColor(renderer, 100,100,255,128); SDL_RenderFillRect(renderer, &rr); }
+        draw_text_ext(renderer, 10, y, buf, white);
+        y += 20;
+    }
+}
+int classes_get_total_height(void) { return class_count * 20; }
+void classes_handle_click(int mx, int my, int y_offset, int scroll) {
+    int y = y_offset - scroll;
+    for (int i = 0; i < class_count; i++) {
+        if (mx >= 10 && mx < 300 && my >= y && my < y+20) {
+            if (selected_class != i) {
+                if (selected_class >= 0) commit_class_changes();
+                selected_class = i;
+                load_class_fields();
+            }
+            return;
+        }
+        y += 20;
+    }
+}
+void classes_update_timer(void) { if (save_timer > 0) save_timer--; }
