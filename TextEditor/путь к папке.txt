@@ -1,1 +1,3 @@
-/d/RPG-Shinzo/RPG-Shinzo/TextEditor
+cd /d/RPG-Shinzo/RPG-Shinzo/TextEditor
+
+cd /d/RPG-Shinzo/RPG-Shinzo/Database
