@@ -110,7 +110,8 @@ typedef struct {
     int dialog_active_field;
     Uint32 dialog_cursor_blink;
 
-    bool   save_blink_active;
+    bool save_blink_active;
+	bool dialog_just_closed;   // запрещает рисование сразу после закрытия диалога
     Uint32 save_blink_time;
 } Editor;
 
@@ -139,6 +140,7 @@ void editor_init(Editor *ed) {
     ed->cam_x = ed->cam_y = 0;
     ed->panning = 0;
     ed->save_blink_active = false;
+	ed->dialog_just_closed = false;
     ed->save_blink_time = 0;
     ed->dialog_active_field = 0;
     ed->dialog_cursor_blink = 0;
@@ -1100,6 +1102,7 @@ void close_dialog(Editor *ed) {
     ed->dialog_active = false;
     ed->dialog_type = DIALOG_NONE;
     ed->dialog_active_field = 0;
+	ed->dialog_just_closed = true;
     memset(ed->input_text, 0, sizeof(ed->input_text));
     memset(ed->input_text2, 0, sizeof(ed->input_text2));
     SDL_StopTextInput();
@@ -1352,6 +1355,9 @@ void handle_input(Editor *ed, bool *running) {
         if (e.type == SDL_MOUSEBUTTONUP && e.button.button == SDL_BUTTON_RIGHT) {
             ed->panning = 0;
         }
+		if (e.type == SDL_MOUSEBUTTONUP && e.button.button == SDL_BUTTON_LEFT) {
+            ed->dialog_just_closed = false;
+        }
 
         if (e.type == SDL_MOUSEBUTTONDOWN && e.button.button == SDL_BUTTON_RIGHT &&
             !(SDL_GetKeyboardState(NULL)[SDL_SCANCODE_LCTRL]) &&
@@ -1557,7 +1563,7 @@ void handle_input(Editor *ed, bool *running) {
     }
 
     Uint32 mouse_state = SDL_GetMouseState(NULL, NULL);
-    if (!ed->dialog_active && (mouse_state & SDL_BUTTON(SDL_BUTTON_LEFT)) && !ed->panning) {
+    if (!ed->dialog_active && (mouse_state & SDL_BUTTON(SDL_BUTTON_LEFT)) && !ed->panning && !ed->dialog_just_closed) {
         int mx, my;
         SDL_GetMouseState(&mx, &my);
         if (mx >= MAP_X && mx < MAP_X + MAP_W && my >= MAP_Y && my < MAP_Y + MAP_H) {
