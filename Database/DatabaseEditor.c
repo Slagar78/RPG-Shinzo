@@ -3,6 +3,7 @@
 #include <SDL_image.h>
 #include <SDL_ttf.h>
 #include "../cJSON.h"
+#include "items_editor.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -58,26 +59,17 @@ typedef struct {
     int max_len;
     int array_index;
     SDL_Rect rect;
-    int is_type_selector;   // 1 = поле выбора типа (выпадающее меню)
 } EditField;
 EditField edit_fields[MAX_EDIT_FIELDS];
 int edit_field_count = 0;
 int active_field_index = -1;
 
-// Кнопка Save
+// Кнопка Save (spells)
 int save_timer = 0;
 #define SAVE_BLINK_DURATION 90
 
-// Прокрутка
+// Прокрутка списка заклинаний
 int spell_scroll = 0;
-
-// Допустимые типы заклинаний (для выпадающего меню)
-const char *spell_type_options[] = {"heal", "attack", "buff", "debuff", "curse", "revive", NULL};
-int spell_type_count = 6;
-
-// Состояние выпадающего меню Type
-int type_dropdown_open = 0;
-int type_dropdown_x = 0, type_dropdown_y = 0;
 
 // Прототипы
 void build_spell_groups();
@@ -86,7 +78,7 @@ void add_new_spell();
 int get_max_spell_id();
 void get_next_magic_name(char *buf, int size);
 
-// Безопасное получение
+// Безопасное получение строки/числа из cJSON
 const char* json_string(cJSON *item, const char *key) {
     cJSON *field = cJSON_GetObjectItem(item, key);
     return (field && cJSON_IsString(field)) ? field->valuestring : "?";
@@ -148,7 +140,6 @@ void reload_spells() {
     selected_is_group = 0;
     edit_field_count = 0;
     active_field_index = -1;
-    type_dropdown_open = 0;
     build_spell_groups();
     if (error_msg[0] == 'C' || error_msg[0] == 'M' || error_msg[0] == 'J') {
         error_msg[0] = '\0';
@@ -169,7 +160,7 @@ void build_spell_groups() {
             strncpy(groups[group_count].name, name, 63);
             groups[group_count].name[63] = '\0';
             groups[group_count].level_count = 0;
-            groups[group_count].expanded = 0;
+            groups[group_count].expanded = 0;   // по умолчанию свёрнуты
             found = group_count++;
         }
         if (groups[found].level_count < 20)
@@ -267,38 +258,32 @@ int save_spells_to_file() {
 void open_edit_fields(cJSON *item) {
     edit_field_count = 0;
     active_field_index = -1;
-    type_dropdown_open = 0;   // закрываем меню при смене выбранного заклинания
     if (!item) return;
     int base_x = 360;
     int base_y = 80;
     int field_offset = 100;
 
-    // 0 Name
     snprintf(edit_fields[0].text, sizeof(edit_fields[0].text), "%s", json_string(item, "name"));
-    edit_fields[0].active = 0; edit_fields[0].json_obj = item; edit_fields[0].json_key = "name"; edit_fields[0].is_numeric = 0; edit_fields[0].max_len = 0; edit_fields[0].array_index = -1; edit_fields[0].is_type_selector = 0;
+    edit_fields[0].active = 0; edit_fields[0].json_obj = item; edit_fields[0].json_key = "name"; edit_fields[0].is_numeric = 0; edit_fields[0].max_len = 0; edit_fields[0].array_index = -1;
     edit_fields[0].rect = (SDL_Rect){base_x+field_offset, base_y + 0*35, 150, 22};
 
-    // 1 Level
     snprintf(edit_fields[1].text, sizeof(edit_fields[1].text), "%d", json_int(item, "level", 0));
-    edit_fields[1].active = 0; edit_fields[1].json_obj = item; edit_fields[1].json_key = "level"; edit_fields[1].is_numeric = 1; edit_fields[1].max_len = 3; edit_fields[1].array_index = -1; edit_fields[1].is_type_selector = 0;
+    edit_fields[1].active = 0; edit_fields[1].json_obj = item; edit_fields[1].json_key = "level"; edit_fields[1].is_numeric = 1; edit_fields[1].max_len = 3; edit_fields[1].array_index = -1;
     edit_fields[1].rect = (SDL_Rect){base_x+field_offset, base_y + 1*35, 150, 22};
 
-    // 2 MP
     snprintf(edit_fields[2].text, sizeof(edit_fields[2].text), "%d", json_int(item, "mp", 0));
-    edit_fields[2].active = 0; edit_fields[2].json_obj = item; edit_fields[2].json_key = "mp"; edit_fields[2].is_numeric = 1; edit_fields[2].max_len = 5; edit_fields[2].array_index = -1; edit_fields[2].is_type_selector = 0;
+    edit_fields[2].active = 0; edit_fields[2].json_obj = item; edit_fields[2].json_key = "mp"; edit_fields[2].is_numeric = 1; edit_fields[2].max_len = 5; edit_fields[2].array_index = -1;
     edit_fields[2].rect = (SDL_Rect){base_x+field_offset, base_y + 2*35, 150, 22};
 
-    // 3 Type (выпадающее меню)
+    // Type – обычное текстовое поле (без выпадающего меню)
     snprintf(edit_fields[3].text, sizeof(edit_fields[3].text), "%s", json_string(item, "type"));
-    edit_fields[3].active = 0; edit_fields[3].json_obj = item; edit_fields[3].json_key = "type"; edit_fields[3].is_numeric = 0; edit_fields[3].max_len = 0; edit_fields[3].array_index = -1; edit_fields[3].is_type_selector = 1;
+    edit_fields[3].active = 0; edit_fields[3].json_obj = item; edit_fields[3].json_key = "type"; edit_fields[3].is_numeric = 0; edit_fields[3].max_len = 0; edit_fields[3].array_index = -1;
     edit_fields[3].rect = (SDL_Rect){base_x+field_offset, base_y + 3*35, 150, 22};
 
-    // 4 Power
     snprintf(edit_fields[4].text, sizeof(edit_fields[4].text), "%d", json_int(item, "power", 0));
-    edit_fields[4].active = 0; edit_fields[4].json_obj = item; edit_fields[4].json_key = "power"; edit_fields[4].is_numeric = 1; edit_fields[4].max_len = 5; edit_fields[4].array_index = -1; edit_fields[4].is_type_selector = 0;
+    edit_fields[4].active = 0; edit_fields[4].json_obj = item; edit_fields[4].json_key = "power"; edit_fields[4].is_numeric = 1; edit_fields[4].max_len = 5; edit_fields[4].array_index = -1;
     edit_fields[4].rect = (SDL_Rect){base_x+field_offset, base_y + 4*35, 150, 22};
 
-    // 5 Range Min
     cJSON *rangeArr = cJSON_GetObjectItem(item, "range");
     int rmin = 0, rmax = 0;
     if (rangeArr && cJSON_IsArray(rangeArr) && cJSON_GetArraySize(rangeArr) >= 2) {
@@ -306,22 +291,19 @@ void open_edit_fields(cJSON *item) {
         rmax = cJSON_GetArrayItem(rangeArr, 1)->valueint;
     }
     snprintf(edit_fields[5].text, sizeof(edit_fields[5].text), "%d", rmin);
-    edit_fields[5].active = 0; edit_fields[5].json_obj = item; edit_fields[5].json_key = NULL; edit_fields[5].is_numeric = 1; edit_fields[5].max_len = 2; edit_fields[5].array_index = 0; edit_fields[5].is_type_selector = 0;
+    edit_fields[5].active = 0; edit_fields[5].json_obj = item; edit_fields[5].json_key = NULL; edit_fields[5].is_numeric = 1; edit_fields[5].max_len = 2; edit_fields[5].array_index = 0;
     edit_fields[5].rect = (SDL_Rect){base_x+field_offset, base_y + 5*35, 150, 22};
 
-    // 6 Range Max
     snprintf(edit_fields[6].text, sizeof(edit_fields[6].text), "%d", rmax);
-    edit_fields[6].active = 0; edit_fields[6].json_obj = item; edit_fields[6].json_key = NULL; edit_fields[6].is_numeric = 1; edit_fields[6].max_len = 2; edit_fields[6].array_index = 1; edit_fields[6].is_type_selector = 0;
+    edit_fields[6].active = 0; edit_fields[6].json_obj = item; edit_fields[6].json_key = NULL; edit_fields[6].is_numeric = 1; edit_fields[6].max_len = 2; edit_fields[6].array_index = 1;
     edit_fields[6].rect = (SDL_Rect){base_x+field_offset, base_y + 6*35, 150, 22};
 
-    // 7 Radius
     snprintf(edit_fields[7].text, sizeof(edit_fields[7].text), "%d", json_int(item, "radius", 0));
-    edit_fields[7].active = 0; edit_fields[7].json_obj = item; edit_fields[7].json_key = "radius"; edit_fields[7].is_numeric = 1; edit_fields[7].max_len = 2; edit_fields[7].array_index = -1; edit_fields[7].is_type_selector = 0;
+    edit_fields[7].active = 0; edit_fields[7].json_obj = item; edit_fields[7].json_key = "radius"; edit_fields[7].is_numeric = 1; edit_fields[7].max_len = 2; edit_fields[7].array_index = -1;
     edit_fields[7].rect = (SDL_Rect){base_x+field_offset, base_y + 7*35, 150, 22};
 
-    // 8 Icon
     snprintf(edit_fields[8].text, sizeof(edit_fields[8].text), "%s", json_string(item, "icon"));
-    edit_fields[8].active = 0; edit_fields[8].json_obj = item; edit_fields[8].json_key = "icon"; edit_fields[8].is_numeric = 0; edit_fields[8].max_len = 0; edit_fields[8].array_index = -1; edit_fields[8].is_type_selector = 0;
+    edit_fields[8].active = 0; edit_fields[8].json_obj = item; edit_fields[8].json_key = "icon"; edit_fields[8].is_numeric = 0; edit_fields[8].max_len = 0; edit_fields[8].array_index = -1;
     edit_fields[8].rect = (SDL_Rect){base_x+field_offset, base_y + 8*35, 150, 22};
 
     edit_field_count = 9;
@@ -361,23 +343,6 @@ int handle_edit_input(SDL_Event *evt, int field_idx) {
     SDL_Rect r = f->rect;
     if (evt->type == SDL_MOUSEBUTTONDOWN && evt->button.button == SDL_BUTTON_LEFT) {
         int mx = evt->button.x, my = evt->button.y;
-        // Поле Type открывает/закрывает выпадающее меню
-        if (f->is_type_selector) {
-            if (mx >= r.x && mx < r.x+r.w && my >= r.y && my < r.y+r.h) {
-                if (!type_dropdown_open) {
-                    type_dropdown_open = 1;
-                    type_dropdown_x = r.x;
-                    type_dropdown_y = r.y + r.h; // под полем
-                } else {
-                    type_dropdown_open = 0;  // повторный клик закрывает
-                }
-                return 1;
-            }
-            // Клик мимо поля Type при открытом дропдауне – закроет его в основной логике
-            return 0;
-        }
-
-        // Обычные поля
         if (mx >= r.x && mx < r.x+r.w && my >= r.y && my < r.y+r.h) {
             if (active_field_index >= 0 && active_field_index != field_idx) commit_field(active_field_index);
             active_field_index = field_idx;
@@ -389,7 +354,7 @@ int handle_edit_input(SDL_Event *evt, int field_idx) {
             commit_field(field_idx);
             int best_idx = -1, best_dist = 1000;
             for (int i = 0; i < edit_field_count; i++) {
-                if (edit_fields[i].is_type_selector || i == 8) continue; // пропускаем Type и Icon
+                if (i == 8) continue; // пропускаем Icon
                 SDL_Rect fr = edit_fields[i].rect;
                 int cy = fr.y + fr.h/2;
                 int dist = abs(my - cy);
@@ -409,7 +374,7 @@ int handle_edit_input(SDL_Event *evt, int field_idx) {
         } else {
             int best_idx = -1, best_dist = 1000;
             for (int i = 0; i < edit_field_count; i++) {
-                if (edit_fields[i].is_type_selector || i == 8) continue;
+                if (i == 8) continue;
                 SDL_Rect fr = edit_fields[i].rect;
                 int cy = fr.y + fr.h/2;
                 int dist = abs(my - cy);
@@ -426,7 +391,7 @@ int handle_edit_input(SDL_Event *evt, int field_idx) {
                 return 1;
             }
         }
-    } else if (evt->type == SDL_KEYDOWN && f->active && !f->is_type_selector) {
+    } else if (evt->type == SDL_KEYDOWN && f->active) {
         if (evt->key.keysym.sym == SDLK_UP) {
             if (field_idx == 0) return 1;
             commit_field(field_idx);
@@ -456,7 +421,7 @@ int handle_edit_input(SDL_Event *evt, int field_idx) {
             return 1;
         } else if (evt->key.keysym.sym == SDLK_LEFT && f->cursor > 0) { f->cursor--; return 1; }
         else if (evt->key.keysym.sym == SDLK_RIGHT && f->cursor < strlen(f->text)) { f->cursor++; return 1; }
-    } else if (evt->type == SDL_TEXTINPUT && f->active && !f->is_type_selector) {
+    } else if (evt->type == SDL_TEXTINPUT && f->active) {
         char ch = evt->text.text[0];
         if (f->is_numeric) {
             if (isdigit(ch) || (ch == '-' && f->cursor == 0 && f->text[0] == '\0')) {
@@ -483,18 +448,19 @@ void draw_edit_field(SDL_Renderer *r, int x, int y, int w, int h, int idx, const
     draw_text_ext(r, x, y + 3, label, white);
     int field_x = x + 100;
     SDL_Rect rect = {field_x, y, w, h};
-    if (edit_fields[idx].is_type_selector) {
-        SDL_SetRenderDrawColor(r, 70,70,120,255); // тёмно-синий для Type
-    } else {
-        SDL_SetRenderDrawColor(r, gray.r, gray.g, gray.b, 255);
-    }
+    SDL_SetRenderDrawColor(r, gray.r, gray.g, gray.b, 255);
     SDL_RenderFillRect(r, &rect);
     SDL_SetRenderDrawColor(r, white.r, white.g, white.b, 255);
     SDL_RenderDrawRect(r, &rect);
     draw_text_ext(r, field_x+5, y+3, display_text, black);
-    if (edit_fields[idx].active && !edit_fields[idx].is_type_selector) {
+    if (edit_fields[idx].active) {
+		
         char before[256] = {0};
-        strncpy(before, edit_fields[idx].text, edit_fields[idx].cursor);
+        if (edit_fields[idx].cursor > 0) {
+            strncpy(before, edit_fields[idx].text, edit_fields[idx].cursor);
+            before[edit_fields[idx].cursor] = '\0';
+        }
+		
         SDL_Surface *s = TTF_RenderUTF8_Solid(g_font, before, black);
         int offset = field_x+5 + (s ? s->w : 0);
         if (s) SDL_FreeSurface(s);
@@ -502,7 +468,6 @@ void draw_edit_field(SDL_Renderer *r, int x, int y, int w, int h, int idx, const
     }
 }
 
-// Добавление заклинания (type = heal по умолчанию)
 void add_new_spell() {
     if (!spells_json) return;
     int new_id = get_max_spell_id() + 1;
@@ -569,11 +534,13 @@ void get_next_magic_name(char *buf, int size) {
     }
 }
 
-int check_button_click(int mx, int my, int px, int py, int *action) {
+// Проверка клика по кнопкам управления Spells
+int check_spell_buttons(int mx, int my, int px, int py, int *action) {
     int btn_y = py + 320;
 
+    // Browse (рядом с Icon)
     if (edit_field_count > 0) {
-        int field_y = py + 10 + 7*35;
+        int field_y = py + 10 + 8*35;
         SDL_Rect browse_btn = {px + 10 + 100 + 150 + 5, field_y, 70, 22};
         if (mx >= browse_btn.x && mx < browse_btn.x + browse_btn.w &&
             my >= browse_btn.y && my < browse_btn.y + browse_btn.h) {
@@ -611,12 +578,16 @@ int check_button_click(int mx, int my, int px, int py, int *action) {
 int main(int argc, char *argv[]) {
     SDL_Init(SDL_INIT_VIDEO);
     TTF_Init();
-    SDL_Window *win = SDL_CreateWindow("Database Editor", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, WINDOW_WIDTH, WINDOW_HEIGHT, SDL_WINDOW_SHOWN|SDL_WINDOW_RESIZABLE);
-    SDL_Renderer *renderer = SDL_CreateRenderer(win, -1, SDL_RENDERER_PRESENTVSYNC|SDL_RENDERER_ACCELERATED);
+    SDL_Window *win = SDL_CreateWindow("Database Editor",
+        SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
+        WINDOW_WIDTH, WINDOW_HEIGHT, SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE);
+    SDL_Renderer *renderer = SDL_CreateRenderer(win, -1,
+        SDL_RENDERER_PRESENTVSYNC | SDL_RENDERER_ACCELERATED);
     g_font = TTF_OpenFont("../assets/ui/fonts/main.ttf", 16);
     g_font_ok = (g_font != NULL);
     load_all();
     if (spells_json) build_spell_groups();
+    items_init(items_json, items_count);   // инициализация модуля предметов
 
     SDL_Color white = {255,255,255}, red = {255,80,80}, blue = {80,160,255}, green_text = {0,200,0};
     SDL_Color cyan = {0,200,255}, yellow = {255,255,0,255}, bright_green = {0,255,0,255};
@@ -631,69 +602,56 @@ int main(int argc, char *argv[]) {
         SDL_Event evt;
         while (SDL_PollEvent(&evt)) {
             if (evt.type == SDL_QUIT) running = 0;
-            if (evt.type == SDL_MOUSEWHEEL && current_tab == TAB_SPELLS) {
-                spell_scroll -= evt.wheel.y * 30;
+
+            // Прокрутка колёсиком мыши
+            if (evt.type == SDL_MOUSEWHEEL) {
+                if (current_tab == TAB_SPELLS) spell_scroll -= evt.wheel.y * 30;
+                else if (current_tab == TAB_ITEMS) items_adjust_scroll(evt.wheel.y * 30);
             }
 
-            // Если выпадающее меню Type открыто, обрабатываем только клики по нему
-            if (type_dropdown_open && evt.type == SDL_MOUSEBUTTONDOWN && evt.button.button == SDL_BUTTON_LEFT) {
-                int mx = evt.button.x, my = evt.button.y;
-                int item_h = 20;
-                // Проверяем попадание в любой пункт меню
-                int clicked = -1;
-                for (int i = 0; i < spell_type_count; i++) {
-                    SDL_Rect item_rect = {type_dropdown_x, type_dropdown_y + i*item_h, 150, item_h};
-                    if (mx >= item_rect.x && mx < item_rect.x+item_rect.w &&
-                        my >= item_rect.y && my < item_rect.y+item_rect.h) {
-                        clicked = i;
-                        break;
-                    }
-                }
-                if (clicked >= 0) {
-                    // Выбрали пункт
-                    strncpy(edit_fields[3].text, spell_type_options[clicked], sizeof(edit_fields[3].text)-1);
-                    edit_fields[3].text[sizeof(edit_fields[3].text)-1] = '\0';
-                    commit_field(3);
-                    type_dropdown_open = 0;
-                } else {
-                    // Клик мимо всех пунктов – закрываем меню
-                    type_dropdown_open = 0;
-                }
-                continue;  // не передаём событие дальше
-            } else if (type_dropdown_open && evt.type == SDL_KEYDOWN) {
-                // Игнорируем клавиатуру при открытом меню (или можно закрыть по Esc, но пока просто не обрабатываем)
-                continue;
+            // Обработка полей ввода (Spells)
+            if (current_tab == TAB_SPELLS) {
+                for (int i = 0; i < edit_field_count; i++)
+                    if (handle_edit_input(&evt, i)) break;
+                if (active_field_index >= 0 && (evt.type == SDL_KEYDOWN || evt.type == SDL_TEXTINPUT))
+                    continue;
+            }
+            // Обработка полей ввода (Items)
+            else if (current_tab == TAB_ITEMS) {
+                items_handle_input(&evt);
+                if (items_is_edit_active() && (evt.type == SDL_KEYDOWN || evt.type == SDL_TEXTINPUT))
+                    continue;
             }
 
-            // Обычная обработка полей ввода
-            for (int i = 0; i < edit_field_count; i++) {
-                if (handle_edit_input(&evt, i))
-                    break;
-            }
-            if (active_field_index >= 0 && (evt.type == SDL_KEYDOWN || evt.type == SDL_TEXTINPUT))
-                continue;
+            // Клик левой кнопкой мыши
             if (evt.type == SDL_MOUSEBUTTONDOWN && evt.button.button == SDL_BUTTON_LEFT) {
                 int mx = evt.button.x, my = evt.button.y;
+
+                // Переключение вкладок
                 if (my < tab_h) {
                     for (int i = 0; i < tab_count; i++) {
                         if (mx >= i*tab_w && mx < (i+1)*tab_w) {
                             current_tab = i;
-                            selected_line = selected_group = -1; selected_is_group = 0;
+                            selected_line = selected_group = -1;
+                            selected_is_group = 0;
                             edit_field_count = 0; active_field_index = -1;
                             spell_scroll = 0;
-                            type_dropdown_open = 0;
+                            items_reset_selection();
                             if (current_tab == TAB_SPELLS && spells_json) build_spell_groups();
                             break;
                         }
                     }
                     continue;
                 }
+
+                // Вкладка SPELLS
                 if (current_tab == TAB_SPELLS) {
                     int px = 360, py = tab_h + 20;
                     int action = 0;
-                    if (check_button_click(mx, my, px, py, &action)) {
-                        switch(action) {
-                            case 1: if (edit_field_count > 0) {
+                    if (check_spell_buttons(mx, my, px, py, &action)) {
+                        switch (action) {
+                            case 1: // Browse иконки
+                                if (edit_field_count > 0) {
                                     char *path = open_file_dialog();
                                     if (path) {
                                         const char *filename = strrchr(path, '\\');
@@ -705,82 +663,83 @@ int main(int argc, char *argv[]) {
                                     }
                                 }
                                 break;
-                            case 2:
-                                if (save_spells_to_file()) {
+                            case 2: // Save spells
+                                if (save_spells_to_file())
                                     save_timer = SAVE_BLINK_DURATION;
-                                }
                                 break;
-                            case 3:
+                            case 3: { // Delete spell (один уровень)
                                 if (selected_group >= 0 && selected_line >= 0) {
                                     const char *spell_name = json_string(groups[selected_group].levels[0], "name");
-                                    int max_level = -1;
-                                    int remove_idx = -1;
+                                    int max_level = -1, remove_idx = -1;
                                     for (int i = 0; i < spells_count; i++) {
                                         cJSON *sp = cJSON_GetArrayItem(spells_json, i);
                                         if (strcmp(json_string(sp, "name"), spell_name) == 0) {
                                             int lv = json_int(sp, "level", 0);
-                                            if (lv > max_level) {
-                                                max_level = lv;
-                                                remove_idx = i;
-                                            }
+                                            if (lv > max_level) { max_level = lv; remove_idx = i; }
                                         }
                                     }
-                                    if (remove_idx >= 0) {
-                                        remove_spell_index(remove_idx);
-                                    }
+                                    if (remove_idx >= 0) remove_spell_index(remove_idx);
                                     selected_line = selected_group = -1;
                                     edit_field_count = 0;
                                     build_spell_groups();
                                 }
                                 break;
-                            case 5: add_new_spell(); break;
-                            case 6: reload_spells(); break;
+                            }
+                            case 5: add_new_spell(); break;   // Add Spell
+                            case 6: reload_spells(); break;   // Refresh
                         }
                         continue;
                     }
-                }
-                // Список заклинаний (переключение только по [+]/[-])
-                int list_y = tab_h + 5 - spell_scroll;
-                int line_h = 20;
-                if (current_tab == TAB_SPELLS && spells_json) {
-                    int y = list_y, found = 0;
-                    for (int g = 0; g < group_count && !found; g++) {
-                        if (mx >= 10 && mx < 45 && my >= y && my < y+line_h) {
-                            groups[g].expanded = !groups[g].expanded;
-                            selected_line = selected_group = -1;
-                            edit_field_count = 0; active_field_index = -1;
-                            type_dropdown_open = 0;
-                            found = 1; break;
-                        }
-                        y += line_h;
-                        if (groups[g].expanded) {
-                            for (int l = 0; l < groups[g].level_count; l++) {
-                                if (mx >= 10 && mx < 300 && my >= y && my < y+line_h) {
-                                    selected_line = l; selected_group = g;
-                                    open_edit_fields(groups[g].levels[l]);
-                                    found = 1; break;
+
+                    // Клик по списку заклинаний
+                    int list_y = tab_h + 5 - spell_scroll;
+                    int line_h = 20;
+                    if (spells_json) {
+                        int y = list_y, found = 0;
+                        for (int g = 0; g < group_count && !found; g++) {
+                            if (mx >= 10 && mx < 45 && my >= y && my < y+line_h) {
+                                groups[g].expanded = !groups[g].expanded;
+                                selected_line = selected_group = -1;
+                                edit_field_count = 0; active_field_index = -1;
+                                found = 1; break;
+                            }
+                            y += line_h;
+                            if (groups[g].expanded) {
+                                for (int l = 0; l < groups[g].level_count; l++) {
+                                    if (mx >= 10 && mx < 300 && my >= y && my < y+line_h) {
+                                        selected_line = l; selected_group = g;
+                                        open_edit_fields(groups[g].levels[l]);
+                                        found = 1; break;
+                                    }
+                                    y += line_h;
                                 }
-                                y += line_h;
                             }
                         }
                     }
                 }
+                // Вкладка ITEMS
+                else if (current_tab == TAB_ITEMS) {
+                    items_handle_click(mx, my, tab_h + 5, items_get_scroll());
+                }
             }
         }
 
+        // --- ОТРИСОВКА ---
         SDL_SetRenderDrawColor(renderer, 30,30,30,255);
         SDL_RenderClear(renderer);
 
+        // Вкладки
         for (int i = 0; i < tab_count; i++) {
             SDL_Rect tr = {i*tab_w, 0, tab_w, tab_h};
             SDL_Color c = (i == current_tab) ? tab_active : tab_inactive;
             SDL_SetRenderDrawColor(renderer, c.r, c.g, c.b, 255);
             SDL_RenderFillRect(renderer, &tr);
             SDL_SetRenderDrawColor(renderer, 0,0,0,255); SDL_RenderDrawRect(renderer, &tr);
-            draw_text_ext(renderer, i*tab_w+5, 5, tab_names[i], black);
+            if (g_font_ok) draw_text_ext(renderer, i*tab_w+5, 5, tab_names[i], black);
         }
 
-        if (error_msg[0]) draw_text_ext(renderer, 10, tab_h + 5, error_msg, red);
+        // Содержимое вкладок
+        if (error_msg[0]) draw_text_ext(renderer, 10, tab_h+5, error_msg, red);
         else if (current_tab == TAB_SPELLS && spells_json) {
             int list_y = tab_h + 5 - spell_scroll;
             int y = list_y;
@@ -794,14 +753,13 @@ int main(int argc, char *argv[]) {
             if (spell_scroll < 0) spell_scroll = 0;
             if (spell_scroll > max_scroll) spell_scroll = max_scroll;
 
-            SDL_Rect clip = {10, tab_h + 5, 300, WINDOW_HEIGHT - tab_h - 5};
+            SDL_Rect clip = {10, tab_h+5, 300, WINDOW_HEIGHT - tab_h - 5};
             SDL_RenderSetClipRect(renderer, &clip);
 
             for (int g = 0; g < group_count; g++) {
                 char truncated_name[51];
                 strncpy(truncated_name, groups[g].name, 50);
                 truncated_name[50] = '\0';
-
                 if (y + 20 >= clip.y && y <= clip.y+clip.h) {
                     int cur_x = 10;
                     cur_x += draw_text_ext(renderer, cur_x, y, groups[g].expanded ? "[-]" : "[+]", green_text);
@@ -813,7 +771,6 @@ int main(int argc, char *argv[]) {
                     cur_x += draw_text_ext(renderer, cur_x, y, ")", blue);
                 }
                 y += 20;
-
                 if (groups[g].expanded) {
                     for (int l = 0; l < groups[g].level_count; l++) {
                         if (y + 20 >= clip.y && y <= clip.y+clip.h) {
@@ -832,28 +789,31 @@ int main(int argc, char *argv[]) {
             }
             SDL_RenderSetClipRect(renderer, NULL);
         }
+        else if (current_tab == TAB_ITEMS) {
+            items_draw_list(renderer, tab_h + 5, items_get_scroll());
+        }
 
+        // Панель редактирования Spells
         if (current_tab == TAB_SPELLS) {
             int px = 360, py = tab_h + 20;
             SDL_SetRenderDrawColor(renderer, 60,60,60,255);
             SDL_Rect panel = {px, py, 580, 500};
             SDL_RenderFillRect(renderer, &panel);
-            SDL_SetRenderDrawColor(renderer, 255,255,255,255); 
+            SDL_SetRenderDrawColor(renderer, 255,255,255,255);
             SDL_RenderDrawRect(renderer, &panel);
 
             int y = py + 10;
-
             if (edit_field_count > 0) {
-                draw_edit_field(renderer, px+10, y, 150, 22, 0, "Name:", edit_fields[0].text);
-                draw_edit_field(renderer, px+10, y+35, 150, 22, 1, "Level:", edit_fields[1].text);
-                draw_edit_field(renderer, px+10, y+70, 150, 22, 2, "MP:", edit_fields[2].text);
-                draw_edit_field(renderer, px+10, y+105, 150, 22, 3, "Type:", edit_fields[3].text);
-                draw_edit_field(renderer, px+10, y+140, 150, 22, 4, "Power:", edit_fields[4].text);
-                draw_edit_field(renderer, px+10, y+175, 150, 22, 5, "Range Min:", edit_fields[5].text);
-                draw_edit_field(renderer, px+10, y+210, 150, 22, 6, "Range Max:", edit_fields[6].text);
-                draw_edit_field(renderer, px+10, y+245, 150, 22, 7, "Radius:", edit_fields[7].text);
+                draw_edit_field(renderer, px+10, y,   150, 22, 0, "Name:", edit_fields[0].text);
+                draw_edit_field(renderer, px+10, y+35,150, 22, 1, "Level:", edit_fields[1].text);
+                draw_edit_field(renderer, px+10, y+70,150, 22, 2, "MP:", edit_fields[2].text);
+                draw_edit_field(renderer, px+10, y+105,150,22, 3, "Type:", edit_fields[3].text);
+                draw_edit_field(renderer, px+10, y+140,150,22, 4, "Power:", edit_fields[4].text);
+                draw_edit_field(renderer, px+10, y+175,150,22, 5, "Range Min:", edit_fields[5].text);
+                draw_edit_field(renderer, px+10, y+210,150,22, 6, "Range Max:", edit_fields[6].text);
+                draw_edit_field(renderer, px+10, y+245,150,22, 7, "Radius:", edit_fields[7].text);
                 const char *short_name = strrchr(edit_fields[8].text, '/') ? strrchr(edit_fields[8].text, '/')+1 : edit_fields[8].text;
-                draw_edit_field(renderer, px+10, y+280, 150, 22, 8, "Icon:", short_name);
+                draw_edit_field(renderer, px+10, y+280,150,22, 8, "Icon:", short_name);
 
                 SDL_Rect browse_btn = {px+10+100+150+5, y+280, 70, 22};
                 SDL_SetRenderDrawColor(renderer, 100,100,200,255); SDL_RenderFillRect(renderer, &browse_btn);
@@ -864,49 +824,43 @@ int main(int argc, char *argv[]) {
                 draw_text_ext(renderer, px+30, y+80, "Press SAVE to write changes to spells.json", white);
             }
 
-            // Кнопки управления
+            // Кнопки управления Spells
             int btn_y = py + 320;
-            SDL_Rect save_btn = {px + 130, btn_y, 80, 30};
+            SDL_Rect save_btn = {px+130, btn_y, 80, 30};
             SDL_Color save_col = (save_timer > 0) ? bright_green : yellow;
             SDL_SetRenderDrawColor(renderer, save_col.r, save_col.g, save_col.b, 255);
             SDL_RenderFillRect(renderer, &save_btn);
             SDL_SetRenderDrawColor(renderer, 0,0,0,255); SDL_RenderDrawRect(renderer, &save_btn);
             draw_text_ext(renderer, save_btn.x+10, save_btn.y+5, "SAVE", black);
 
-            SDL_Rect refresh_btn = {px + 215, btn_y, 85, 30};
+            SDL_Rect refresh_btn = {px+215, btn_y, 85, 30};
             SDL_SetRenderDrawColor(renderer, 180,180,255,255); SDL_RenderFillRect(renderer, &refresh_btn);
             SDL_SetRenderDrawColor(renderer, 0,0,0,255); SDL_RenderDrawRect(renderer, &refresh_btn);
             draw_text_ext(renderer, refresh_btn.x+8, refresh_btn.y+5, "Refresh", black);
 
-            SDL_Rect del_spell_btn = {px + 10, btn_y, 115, 30};
+            SDL_Rect del_spell_btn = {px+10, btn_y, 115, 30};
             SDL_SetRenderDrawColor(renderer, 200,80,80,255); SDL_RenderFillRect(renderer, &del_spell_btn);
             SDL_SetRenderDrawColor(renderer, 255,255,255,255); SDL_RenderDrawRect(renderer, &del_spell_btn);
             draw_text_ext(renderer, del_spell_btn.x+5, del_spell_btn.y+5, "Del Spell", white);
 
-            SDL_Rect add_btn = {px + 305, btn_y, 90, 30};
+            SDL_Rect add_btn = {px+305, btn_y, 90, 30};
             SDL_SetRenderDrawColor(renderer, 100,200,100,255); SDL_RenderFillRect(renderer, &add_btn);
             SDL_SetRenderDrawColor(renderer, 255,255,255,255); SDL_RenderDrawRect(renderer, &add_btn);
             draw_text_ext(renderer, add_btn.x+5, add_btn.y+5, "Add Spell", white);
         }
 
-        // Рисуем выпадающее меню Type, если открыто
-        if (type_dropdown_open && current_tab == TAB_SPELLS && edit_field_count > 0) {
-            int item_h = 20;
-            for (int i = 0; i < spell_type_count; i++) {
-                SDL_Rect item_rect = {type_dropdown_x, type_dropdown_y + i*item_h, 150, item_h};
-                SDL_SetRenderDrawColor(renderer, 80,80,140,255);
-                SDL_RenderFillRect(renderer, &item_rect);
-                SDL_SetRenderDrawColor(renderer, 255,255,255,255);
-                SDL_RenderDrawRect(renderer, &item_rect);
-                draw_text_ext(renderer, item_rect.x+5, item_rect.y+2, spell_type_options[i], white);
-            }
+        // Панель редактирования Items
+        if (current_tab == TAB_ITEMS) {
+            items_draw_edit_panel(renderer, 360, tab_h + 20);
         }
 
-        if (save_timer > 0) save_timer--;
+        if (save_timer > 0) save_timer--;   // для spells (items имеет свой таймер)
 
         SDL_RenderPresent(renderer);
         SDL_Delay(16);
     }
+
+    // Очистка
     if (g_font) TTF_CloseFont(g_font);
     SDL_DestroyRenderer(renderer);
     SDL_DestroyWindow(win);
