@@ -71,8 +71,8 @@
 			"icon":	"assets/spells/magic_empty.png"
 		}, {
 			"id":	8,
-			"name":	"magic02",
-			"level":	1,
+			"name":	"Heal",
+			"level":	5,
 			"mp":	5,
 			"type":	"heal",
 			"range":	[0, 3],

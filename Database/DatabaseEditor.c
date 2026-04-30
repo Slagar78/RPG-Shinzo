@@ -16,6 +16,7 @@
 // Глобальные данные
 cJSON *spells_json = NULL;
 int spells_count = 0;
+cJSON *spells_root = NULL;
 cJSON *items_json = NULL;
 int items_count = 0;
 cJSON *actors_json = NULL;
@@ -69,6 +70,13 @@ int save_timer = 0;
 // Прокрутка
 int spell_scroll = 0;
 
+// Прототипы
+void build_spell_groups();
+void get_current_data(cJSON **arr, int *count);
+void add_new_spell();
+int get_max_spell_id();
+void get_next_magic_name(char *buf, int size);
+
 // Безопасное получение
 const char* json_string(cJSON *item, const char *key) {
     cJSON *field = cJSON_GetObjectItem(item, key);
@@ -79,8 +87,8 @@ int json_int(cJSON *item, const char *key, int def) {
     return (field && cJSON_IsNumber(field)) ? field->valueint : def;
 }
 
-// Загрузка JSON
-int load_json_file(const char *filename, cJSON **out_array, const char *key, int *count) {
+// Загрузка JSON с сохранением корня (для spells)
+int load_json_file_with_root(const char *filename, cJSON **out_array, const char *key, int *count, cJSON **out_root) {
     FILE *f = fopen(filename, "rb");
     if (!f) { snprintf(error_msg, sizeof(error_msg), "Cannot open %s", filename); return 0; }
     fseek(f, 0, SEEK_END);
@@ -95,25 +103,48 @@ int load_json_file(const char *filename, cJSON **out_array, const char *key, int
     free(buf);
     if (!root) { snprintf(error_msg, sizeof(error_msg), "JSON parse error"); return 0; }
     cJSON *arr = cJSON_GetObjectItem(root, key);
-    if (!arr || !cJSON_IsArray(arr)) { snprintf(error_msg, sizeof(error_msg), "Missing '%s' array", key); cJSON_Delete(root); return 0; }
+    if (!arr || !cJSON_IsArray(arr)) {
+        snprintf(error_msg, sizeof(error_msg), "Missing '%s' array", key);
+        cJSON_Delete(root);
+        return 0;
+    }
     *out_array = arr;
     *count = cJSON_GetArraySize(arr);
+    *out_root = root;
     error_msg[0] = '\0';
     return 1;
 }
+
+int load_json_file(const char *filename, cJSON **out_array, const char *key, int *count) {
+    cJSON *root = NULL;
+    return load_json_file_with_root(filename, out_array, key, count, &root);
+}
+
 void load_all() {
-    load_json_file("../data/spells/spells.json", &spells_json, "spells", &spells_count);
+    load_json_file_with_root("../data/spells/spells.json", &spells_json, "spells", &spells_count, &spells_root);
     load_json_file("../data/items/items.json", &items_json, "items", &items_count);
     load_json_file("../data/actors/actors.json", &actors_json, "actors", &actors_count);
     load_json_file("../data/actors/classes.json", &classes_json, "classes", &classes_count);
 }
 
-void get_current_data(cJSON **arr, int *count);
-void add_new_spell();
-int get_max_spell_id();
-void get_next_magic_name(char *buf, int size);
+void reload_spells() {
+    if (spells_root) {
+        cJSON_Delete(spells_root);
+        spells_root = NULL;
+    }
+    spells_json = NULL;
+    spells_count = 0;
+    load_json_file_with_root("../data/spells/spells.json", &spells_json, "spells", &spells_count, &spells_root);
+    selected_line = selected_group = -1;
+    selected_is_group = 0;
+    edit_field_count = 0;
+    active_field_index = -1;
+    build_spell_groups();
+    if (error_msg[0] == 'C' || error_msg[0] == 'M' || error_msg[0] == 'J') {
+        error_msg[0] = '\0';
+    }
+}
 
-// Группировка (по умолчанию свёрнуто)
 void build_spell_groups() {
     if (!spells_json) return;
     group_count = 0;
@@ -128,7 +159,7 @@ void build_spell_groups() {
             strncpy(groups[group_count].name, name, 63);
             groups[group_count].name[63] = '\0';
             groups[group_count].level_count = 0;
-            groups[group_count].expanded = 0;   // свернуто
+            groups[group_count].expanded = 0;
             found = group_count++;
         }
         if (groups[found].level_count < 20)
@@ -137,7 +168,6 @@ void build_spell_groups() {
     spell_scroll = 0;
 }
 
-// Отрисовка текста (возвращает ширину)
 int draw_text_ext(SDL_Renderer *r, int x, int y, const char *text, SDL_Color color) {
     if (!g_font_ok) return 0;
     SDL_Surface *s = TTF_RenderUTF8_Solid(g_font, text, color);
@@ -151,7 +181,6 @@ int draw_text_ext(SDL_Renderer *r, int x, int y, const char *text, SDL_Color col
     return w;
 }
 
-// Диалог выбора файла
 char* open_file_dialog() {
     OPENFILENAMEA ofn;
     char szFile[260] = {0};
@@ -173,7 +202,6 @@ char* open_file_dialog() {
     return NULL;
 }
 
-// Безопасное удаление заклинания
 void remove_spell_index(int idx) {
     if (idx < 0 || idx >= spells_count) return;
     cJSON *new_arr = cJSON_CreateArray();
@@ -186,9 +214,28 @@ void remove_spell_index(int idx) {
     spells_count = cJSON_GetArraySize(new_arr);
 }
 
-// Сохранение spells.json
-void save_spells_to_file() {
-    if (!spells_json) return;
+int has_duplicate_spells() {
+    for (int i = 0; i < spells_count; i++) {
+        cJSON *a = cJSON_GetArrayItem(spells_json, i);
+        const char *name_a = json_string(a, "name");
+        int level_a = json_int(a, "level", -1);
+        for (int j = i + 1; j < spells_count; j++) {
+            cJSON *b = cJSON_GetArrayItem(spells_json, j);
+            if (strcmp(json_string(b, "name"), name_a) == 0 &&
+                json_int(b, "level", -1) == level_a) {
+                return 1;
+            }
+        }
+    }
+    return 0;
+}
+
+int save_spells_to_file() {
+    if (!spells_json) return 0;
+    if (has_duplicate_spells()) {
+        snprintf(error_msg, sizeof(error_msg), "Duplicate spell detected (same name and level)!");
+        return 0;
+    }
     cJSON *root = cJSON_CreateObject();
     cJSON *dup = cJSON_Duplicate(spells_json, 1);
     cJSON_AddItemToObject(root, "spells", dup);
@@ -203,17 +250,16 @@ void save_spells_to_file() {
     }
     free(json_str);
     cJSON_Delete(root);
+    return 1;
 }
 
-// Поля редактирования (базовая координата 360, отступ поля = 100)
 void open_edit_fields(cJSON *item) {
     edit_field_count = 0;
     active_field_index = -1;
     if (!item) return;
-
     int base_x = 360;
     int base_y = 80;
-    int field_offset = 100;   // было 80, теперь отступ 100 пикселей
+    int field_offset = 100;
 
     snprintf(edit_fields[0].text, sizeof(edit_fields[0].text), "%s", json_string(item, "name"));
     edit_fields[0].active = 0; edit_fields[0].json_obj = item; edit_fields[0].json_key = "name"; edit_fields[0].is_numeric = 0; edit_fields[0].max_len = 0; edit_fields[0].array_index = -1;
@@ -391,14 +437,13 @@ int handle_edit_input(SDL_Event *evt, int field_idx) {
 void draw_edit_field(SDL_Renderer *r, int x, int y, int w, int h, int idx, const char *label, const char *display_text) {
     SDL_Color white = {255,255,255}, black = {0,0,0}, gray = {100,100,100};
     draw_text_ext(r, x, y + 3, label, white);
-    // Увеличен отступ: было x+80, стало x+100
     int field_x = x + 100;
     SDL_Rect rect = {field_x, y, w, h};
     SDL_SetRenderDrawColor(r, gray.r, gray.g, gray.b, 255);
     SDL_RenderFillRect(r, &rect);
     SDL_SetRenderDrawColor(r, white.r, white.g, white.b, 255);
     SDL_RenderDrawRect(r, &rect);
-    draw_text_ext(r, field_x+5, y+3, display_text, black);   // +5 чтобы текст был внутри поля с отступом
+    draw_text_ext(r, field_x+5, y+3, display_text, black);
     if (edit_fields[idx].active) {
         char before[256] = {0};
         strncpy(before, edit_fields[idx].text, edit_fields[idx].cursor);
@@ -409,7 +454,6 @@ void draw_edit_field(SDL_Renderer *r, int x, int y, int w, int h, int idx, const
     }
 }
 
-// Добавление заклинания
 void add_new_spell() {
     if (!spells_json) return;
     int new_id = get_max_spell_id() + 1;
@@ -476,32 +520,37 @@ void get_next_magic_name(char *buf, int size) {
     }
 }
 
-// Проверка клика по кнопкам
 int check_button_click(int mx, int my, int px, int py, int *action) {
     int btn_y = py + 300;
 
     if (edit_field_count > 0) {
         int field_y = py + 10 + 7*35;
-        SDL_Rect browse_btn = {px + 10 + 100 + 150 + 5, field_y, 70, 22};   // поле Icon сдвинуто (x+100)
+        SDL_Rect browse_btn = {px + 10 + 100 + 150 + 5, field_y, 70, 22};
         if (mx >= browse_btn.x && mx < browse_btn.x + browse_btn.w &&
             my >= browse_btn.y && my < browse_btn.y + browse_btn.h) {
             *action = 1; return 1;
         }
     }
 
-    SDL_Rect save_btn = {px + 200, btn_y, 80, 30};
+    SDL_Rect save_btn = {px + 130, btn_y, 80, 30};
     if (mx >= save_btn.x && mx < save_btn.x + save_btn.w &&
         my >= save_btn.y && my < save_btn.y + save_btn.h) {
         *action = 2; return 1;
     }
 
-    SDL_Rect del_spell_btn = {px + 10, btn_y, 130, 30};
+    SDL_Rect refresh_btn = {px + 215, btn_y, 85, 30};
+    if (mx >= refresh_btn.x && mx < refresh_btn.x + refresh_btn.w &&
+        my >= refresh_btn.y && my < refresh_btn.y + refresh_btn.h) {
+        *action = 6; return 1;
+    }
+
+    SDL_Rect del_spell_btn = {px + 10, btn_y, 115, 30};
     if (mx >= del_spell_btn.x && mx < del_spell_btn.x + del_spell_btn.w &&
         my >= del_spell_btn.y && my < del_spell_btn.y + del_spell_btn.h) {
         *action = 3; return 1;
     }
 
-    SDL_Rect add_btn = {px + 300, btn_y, 90, 30};
+    SDL_Rect add_btn = {px + 305, btn_y, 90, 30};
     if (mx >= add_btn.x && mx < add_btn.x + add_btn.w &&
         my >= add_btn.y && my < add_btn.y + add_btn.h) {
         *action = 5; return 1;
@@ -520,8 +569,8 @@ int main(int argc, char *argv[]) {
     load_all();
     if (spells_json) build_spell_groups();
 
-    SDL_Color white = {255,255,255}, red = {255,80,80}, blue = {80,160,255}, green = {0,200,0};
-    SDL_Color orange = {255,140,0}, cyan = {0,200,255}, yellow = {255,255,0,255}, bright_green = {0,255,0,255};
+    SDL_Color white = {255,255,255}, red = {255,80,80}, blue = {80,160,255}, green_text = {0,200,0};
+    SDL_Color cyan = {0,200,255}, yellow = {255,255,0,255}, bright_green = {0,255,0,255};
     SDL_Color black = {0,0,0,255};
     SDL_Color tab_inactive = {180,180,200}, tab_active = {100,100,255};
 
@@ -558,7 +607,7 @@ int main(int argc, char *argv[]) {
                     continue;
                 }
                 if (current_tab == TAB_SPELLS) {
-                    int px = 360, py = tab_h + 20;   // вернул 360
+                    int px = 360, py = tab_h + 20;
                     int action = 0;
                     if (check_button_click(mx, my, px, py, &action)) {
                         switch(action) {
@@ -574,8 +623,12 @@ int main(int argc, char *argv[]) {
                                     }
                                 }
                                 break;
-                            case 2: save_spells_to_file(); save_timer = SAVE_BLINK_DURATION; break;
-                            case 3: // Удаление одного уровня
+                            case 2:
+                                if (save_spells_to_file()) {
+                                    save_timer = SAVE_BLINK_DURATION;
+                                }
+                                break;
+                            case 3:
                                 if (selected_group >= 0 && selected_line >= 0) {
                                     const char *spell_name = json_string(groups[selected_group].levels[0], "name");
                                     int max_level = -1;
@@ -599,6 +652,7 @@ int main(int argc, char *argv[]) {
                                 }
                                 break;
                             case 5: add_new_spell(); break;
+                            case 6: reload_spells(); break;
                         }
                         continue;
                     }
@@ -667,9 +721,9 @@ int main(int argc, char *argv[]) {
 
                 if (y + 20 >= clip.y && y <= clip.y+clip.h) {
                     int cur_x = 10;
-                    cur_x += draw_text_ext(renderer, cur_x, y, groups[g].expanded ? "[-]" : "[+]", green);
+                    cur_x += draw_text_ext(renderer, cur_x, y, groups[g].expanded ? "[-]" : "[+]", green_text);
                     cur_x += draw_text_ext(renderer, cur_x, y, truncated_name, red);
-                    cur_x += draw_text_ext(renderer, cur_x, y, "(", blue);        // скобки синие
+                    cur_x += draw_text_ext(renderer, cur_x, y, "(", blue);
                     char count_str[16];
                     snprintf(count_str, sizeof(count_str), "%d", groups[g].level_count);
                     cur_x += draw_text_ext(renderer, cur_x, y, count_str, cyan);
@@ -697,7 +751,7 @@ int main(int argc, char *argv[]) {
         }
 
         if (current_tab == TAB_SPELLS) {
-            int px = 360, py = tab_h + 20;   // вернул 360
+            int px = 360, py = tab_h + 20;
             SDL_SetRenderDrawColor(renderer, 60,60,60,255);
             SDL_Rect panel = {px, py, 580, 450};
             SDL_RenderFillRect(renderer, &panel);
@@ -717,7 +771,6 @@ int main(int argc, char *argv[]) {
                 const char *short_name = strrchr(edit_fields[7].text, '/') ? strrchr(edit_fields[7].text, '/')+1 : edit_fields[7].text;
                 draw_edit_field(renderer, px+10, y+245, 150, 22, 7, "Icon:", short_name);
 
-                // Browse (пересчитан с учётом нового отступа)
                 SDL_Rect browse_btn = {px+10+100+150+5, y+245, 70, 22};
                 SDL_SetRenderDrawColor(renderer, 100,100,200,255); SDL_RenderFillRect(renderer, &browse_btn);
                 SDL_SetRenderDrawColor(renderer, 255,255,255,255); SDL_RenderDrawRect(renderer, &browse_btn);
@@ -727,21 +780,26 @@ int main(int argc, char *argv[]) {
                 draw_text_ext(renderer, px+30, y+80, "Press SAVE to write changes to spells.json", white);
             }
 
-            // Кнопки
+            // Кнопки (SAVE, REFRESH, DEL, ADD)
             int btn_y = py + 300;
-            SDL_Rect save_btn = {px+200, btn_y, 80, 30};
+            SDL_Rect save_btn = {px + 130, btn_y, 80, 30};
             SDL_Color save_col = (save_timer > 0) ? bright_green : yellow;
             SDL_SetRenderDrawColor(renderer, save_col.r, save_col.g, save_col.b, 255);
             SDL_RenderFillRect(renderer, &save_btn);
             SDL_SetRenderDrawColor(renderer, 0,0,0,255); SDL_RenderDrawRect(renderer, &save_btn);
             draw_text_ext(renderer, save_btn.x+10, save_btn.y+5, "SAVE", black);
 
-            SDL_Rect del_spell_btn = {px+10, btn_y, 130, 30};
+            SDL_Rect refresh_btn = {px + 215, btn_y, 85, 30};
+            SDL_SetRenderDrawColor(renderer, 180,180,255,255); SDL_RenderFillRect(renderer, &refresh_btn);
+            SDL_SetRenderDrawColor(renderer, 0,0,0,255); SDL_RenderDrawRect(renderer, &refresh_btn);
+            draw_text_ext(renderer, refresh_btn.x+8, refresh_btn.y+5, "Refresh", black);
+
+            SDL_Rect del_spell_btn = {px + 10, btn_y, 115, 30};
             SDL_SetRenderDrawColor(renderer, 200,80,80,255); SDL_RenderFillRect(renderer, &del_spell_btn);
             SDL_SetRenderDrawColor(renderer, 255,255,255,255); SDL_RenderDrawRect(renderer, &del_spell_btn);
             draw_text_ext(renderer, del_spell_btn.x+5, del_spell_btn.y+5, "Del Spell", white);
 
-            SDL_Rect add_btn = {px+300, btn_y, 90, 30};
+            SDL_Rect add_btn = {px + 305, btn_y, 90, 30};
             SDL_SetRenderDrawColor(renderer, 100,200,100,255); SDL_RenderFillRect(renderer, &add_btn);
             SDL_SetRenderDrawColor(renderer, 255,255,255,255); SDL_RenderDrawRect(renderer, &add_btn);
             draw_text_ext(renderer, add_btn.x+5, add_btn.y+5, "Add Spell", white);
