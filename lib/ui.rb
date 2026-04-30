@@ -1598,8 +1598,8 @@ end
 
     # Загрузка пустой текстуры
     unless @empty_magic_tex_loaded
-      if File.exist?("assets/spell/magic_empty.png")
-        @empty_magic_tex = Raylib.LoadTexture("assets/spell/magic_empty.png")
+      if File.exist?("assets/spells/magic_empty.png")
+        @empty_magic_tex = Raylib.LoadTexture("assets/spells/magic_empty.png")
         Raylib.SetTextureFilter(@empty_magic_tex, 0) if @empty_magic_tex
       end
       @empty_magic_tex_loaded = true

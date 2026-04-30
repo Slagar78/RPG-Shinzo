@@ -9,7 +9,7 @@
       "range": [0, 1],
       "radius": 0,
       "power": 15,
-      "icon": "assets/spell/Aura.png"
+      "icon": "assets/spells/Aura.png"
     },
     {
       "id": 1,
@@ -20,7 +20,7 @@
       "range": [0, 2],
       "radius": 0,
       "power": 15,
-      "icon": "assets/spell/Heal.png"
+      "icon": "assets/spells/Heal.png"
     },
     {
       "id": 2,
@@ -31,7 +31,7 @@
       "range": [0, 3],
       "radius": 0,
       "power": 30,
-      "icon": "assets/spell/Heal.png"
+      "icon": "assets/spells/Heal.png"
     },
     {
       "id": 3,
@@ -42,7 +42,7 @@
       "range": [0, 1],
       "radius": 0,
       "power": 255,
-      "icon": "assets/spell/Heal.png"
+      "icon": "assets/spells/Heal.png"
     },
     {
       "id": 4,
@@ -53,7 +53,7 @@
       "range": [0, 3],
       "radius": 1,
       "power": 15,
-      "icon": "assets/spell/Aura.png"
+      "icon": "assets/spells/Aura.png"
     },
     {
       "id": 5,
@@ -64,7 +64,7 @@
       "range": [0, 3],
       "radius": 2,
       "power": 15,
-      "icon": "assets/spell/Aura.png"
+      "icon": "assets/spells/Aura.png"
     }
   ]
 }
