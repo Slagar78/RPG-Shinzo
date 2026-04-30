@@ -5,12 +5,14 @@
 #include "../cJSON.h"
 #include "items_editor.h"
 #include "actors_editor.h"
+#include "classes_editor.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
 #include <windows.h>
 #include <commdlg.h>
+#include "formatter.h"
 
 #define WINDOW_WIDTH 960
 #define WINDOW_HEIGHT 680
@@ -25,10 +27,12 @@ cJSON *actors_json = NULL;
 int actors_count = 0;
 cJSON *classes_json = NULL;
 int classes_count = 0;
+cJSON *curves_json = NULL;
+int curves_count = 0;
 
 char error_msg[256] = "";
 
-typedef enum { TAB_SPELLS, TAB_ITEMS, TAB_ACTORS, TAB_CLASSES } Tab;
+typedef enum { TAB_SPELLS, TAB_ITEMS, TAB_ACTORS, TAB_CLASSES, TAB_FORMAT } Tab;
 Tab current_tab = TAB_SPELLS;
 
 TTF_Font *g_font = NULL;
@@ -71,6 +75,8 @@ int save_timer = 0;
 
 // Прокрутка списка заклинаний
 int spell_scroll = 0;
+
+int format_timer = 0;
 
 // Прототипы
 void build_spell_groups();
@@ -127,6 +133,7 @@ void load_all() {
     load_json_file("../data/items/items.json", &items_json, "items", &items_count);
     load_json_file("../data/actors/actors.json", &actors_json, "actors", &actors_count);
     load_json_file("../data/actors/classes.json", &classes_json, "classes", &classes_count);
+	load_json_file("../data/actors/growth_curves.json", &curves_json, "curves", &curves_count);
 }
 
 void reload_spells() {
@@ -590,14 +597,15 @@ int main(int argc, char *argv[]) {
     if (spells_json) build_spell_groups();
     items_init(items_json, items_count);   // инициализация модуля предметов
 	actors_init(actors_json, actors_count);
+	classes_init(classes_json, classes_count);
 
     SDL_Color white = {255,255,255}, red = {255,80,80}, blue = {80,160,255}, green_text = {0,200,0};
     SDL_Color cyan = {0,200,255}, yellow = {255,255,0,255}, bright_green = {0,255,0,255};
     SDL_Color black = {0,0,0,255};
     SDL_Color tab_inactive = {180,180,200}, tab_active = {100,100,255};
 
-    const char *tab_names[] = {"Spells", "Items", "Actors", "Classes"};
-    int tab_count = 4, tab_w = 100, tab_h = 30;
+    const char *tab_names[] = {"Spells", "Items", "Actors", "Classes", "Format"};
+    int tab_count = 5, tab_w = 80, tab_h = 30;   // 5 вкладок по 80 px, чтобы влезло 5*80=400
     int running = 1;
 
     while (running) {
@@ -607,9 +615,10 @@ int main(int argc, char *argv[]) {
 
             // Прокрутка колёсиком мыши
             if (evt.type == SDL_MOUSEWHEEL) {
-                if (current_tab == TAB_SPELLS) spell_scroll -= evt.wheel.y * 30;
-                else if (current_tab == TAB_ITEMS) items_adjust_scroll(evt.wheel.y * 30);
-				else if (current_tab == TAB_ACTORS) actors_adjust_scroll(evt.wheel.y * 30);
+            if (current_tab == TAB_SPELLS) spell_scroll -= evt.wheel.y * 30;
+            else if (current_tab == TAB_ITEMS) items_adjust_scroll(evt.wheel.y * 30);
+			else if (current_tab == TAB_ACTORS) actors_adjust_scroll(evt.wheel.y * 30);
+			else if (current_tab == TAB_CLASSES) classes_adjust_scroll(evt.wheel.y * 30);
             }
 
             // Обработка полей ввода (Spells)
@@ -630,7 +639,14 @@ int main(int argc, char *argv[]) {
                 if (actors_is_edit_active() && (evt.type == SDL_KEYDOWN || evt.type == SDL_TEXTINPUT))
                     continue;
             }
-
+			else if (current_tab == TAB_CLASSES) {
+                classes_handle_input(&evt);
+                if (classes_is_edit_active() && (evt.type == SDL_KEYDOWN || evt.type == SDL_TEXTINPUT))
+                    continue;
+            }
+            else if (current_tab == TAB_FORMAT) {
+                // нет полей ввода
+            }
             // Клик левой кнопкой мыши
             if (evt.type == SDL_MOUSEBUTTONDOWN && evt.button.button == SDL_BUTTON_LEFT) {
                 int mx = evt.button.x, my = evt.button.y;
@@ -646,6 +662,7 @@ int main(int argc, char *argv[]) {
                             spell_scroll = 0;
                             items_reset_selection();
 							actors_reset_selection();
+							classes_reset_selection();
                             if (current_tab == TAB_SPELLS && spells_json) build_spell_groups();
                             break;
                         }
@@ -733,6 +750,20 @@ int main(int argc, char *argv[]) {
 				else if (current_tab == TAB_ACTORS) {
                 actors_handle_click(mx, my, tab_h + 5, actors_get_scroll());
                 }
+				else if (current_tab == TAB_CLASSES) {
+                    classes_handle_click(mx, my, tab_h + 5, classes_get_scroll());
+                }
+					else if (current_tab == TAB_FORMAT) {
+						
+                    int px = 360, py = tab_h + 20;
+                    int btn_y = py + 80;
+                    SDL_Rect format_btn = {px + 150, btn_y, 120, 30};
+                    if (mx >= format_btn.x && mx < format_btn.x+format_btn.w &&
+                        my >= format_btn.y && my < format_btn.y+format_btn.h) {
+                        format_all_json();
+                        format_timer = 90;  // ~1.5 секунды при 60 FPS
+                    }
+                }
             }
         }
 
@@ -807,6 +838,9 @@ int main(int argc, char *argv[]) {
 		else if (current_tab == TAB_ACTORS) {
             actors_draw_list(renderer, tab_h + 5, actors_get_scroll());
         }
+		else if (current_tab == TAB_CLASSES) {
+            classes_draw_list(renderer, tab_h + 5, classes_get_scroll());
+        }
 
         // Панель редактирования Spells
         if (current_tab == TAB_SPELLS) {
@@ -871,10 +905,34 @@ int main(int argc, char *argv[]) {
 		if (current_tab == TAB_ACTORS) {
            actors_draw_edit_panel(renderer, 360, tab_h + 20);
         }
+		if (current_tab == TAB_CLASSES) {
+           classes_draw_edit_panel(renderer, 360, tab_h + 20);
+        }
+        if (current_tab == TAB_FORMAT) {
+            int px = 360, py = tab_h + 20;
+            SDL_SetRenderDrawColor(renderer, 60,60,60,255);
+            SDL_Rect panel = {px, py, 580, 200};
+            SDL_RenderFillRect(renderer, &panel);
+            SDL_SetRenderDrawColor(renderer, 255,255,255,255);
+            SDL_RenderDrawRect(renderer, &panel);
 
+            draw_text_ext(renderer, px+30, py+20, "Remove extra spaces from JSON files", white);
+            draw_text_ext(renderer, px+30, py+50, "Press the button to format all files", white);
+
+            int btn_y = py + 80;
+            SDL_Rect format_btn = {px + 150, btn_y, 120, 30};
+            SDL_Color btn_col = (format_timer > 0) ? bright_green : yellow;
+            SDL_SetRenderDrawColor(renderer, btn_col.r, btn_col.g, btn_col.b, 255);
+            SDL_RenderFillRect(renderer, &format_btn);
+            SDL_SetRenderDrawColor(renderer, 0,0,0,255);
+            SDL_RenderDrawRect(renderer, &format_btn);
+            draw_text_ext(renderer, format_btn.x+15, format_btn.y+5, "Format All", black);
+        }
         if (save_timer > 0) save_timer--;
+		if (format_timer > 0) format_timer--;
 			actors_update_timer();
             items_update_timer();  //
+			classes_update_timer();
 
         SDL_RenderPresent(renderer);
         SDL_Delay(16);

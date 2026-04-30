@@ -1,7 +1,7 @@
 {
 	"actors":	[{
 			"id":	0,
-			"name":	"MUSHRA",
+			"name":	"Mushra",
 			"class_id":	0,
 			"portrait":	"Mushra",
 			"mapsprite":	"hero",
@@ -11,7 +11,7 @@
 			"defeats":	0
 		}, {
 			"id":	1,
-			"name":	"SARAH",
+			"name":	"Saago",
 			"class_id":	1,
 			"portrait":	"Daku",
 			"mapsprite":	"hero",
@@ -21,7 +21,7 @@
 			"defeats":	0
 		}, {
 			"id":	2,
-			"name":	"CHESTER",
+			"name":	"Kutal",
 			"class_id":	2,
 			"portrait":	"Kutal",
 			"mapsprite":	"hero",
@@ -31,7 +31,7 @@
 			"defeats":	0
 		}, {
 			"id":	3,
-			"name":	"Kane",
+			"name":	"Yakumo",
 			"class_id":	3,
 			"portrait":	"Ryuma",
 			"mapsprite":	"hero",
@@ -41,7 +41,7 @@
 			"defeats":	0
 		}, {
 			"id":	4,
-			"name":	"Mane",
+			"name":	"Daku",
 			"class_id":	4,
 			"portrait":	"Rusephina",
 			"mapsprite":	"hero",
@@ -51,7 +51,7 @@
 			"defeats":	0
 		}, {
 			"id":	5,
-			"name":	"Wolf",
+			"name":	"Ruyma",
 			"class_id":	5,
 			"portrait":	"Gyasa",
 			"mapsprite":	"hero",
@@ -61,21 +61,11 @@
 			"defeats":	0
 		}, {
 			"id":	6,
-			"name":	"Bane",
-			"class_id":	6,
+			"name":	"Rusephina",
+			"class_id":	1,
 			"portrait":	"Saago",
 			"mapsprite":	"hero",
-			"level":	8,
-			"exp":	0,
-			"kills":	0,
-			"defeats":	0
-		}, {
-			"id":	7,
-			"name":	"Actor00",
-			"class_id":	3,
-			"portrait":	"Mushra",
-			"mapsprite":	"mapsprite000",
-			"level":	1,
+			"level":	20,
 			"exp":	0,
 			"kills":	0,
 			"defeats":	0
