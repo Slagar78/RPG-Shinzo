@@ -51,21 +51,21 @@
 			"description":	"Выход из битвы"
 		}, {
 			"id":	5,
-			"name":	"Item00",
-			"category":	"consumable",
+			"name":	"Short Sword",
+			"category":	"Weapon",
 			"price":	10,
 			"range":	[0, 1],
 			"use_spell":	"HEAL",
 			"spell_level":	1,
-			"icon":	"assets/items/empty.png"
+			"icon":	"assets/items/Short_Sword.png"
 		}, {
 			"id":	6,
-			"name":	"Item00",
-			"category":	"consumable",
+			"name":	"Black Ring",
+			"category":	"Ring",
 			"price":	10,
 			"range":	[0, 1],
 			"use_spell":	"HEAL",
 			"spell_level":	1,
-			"icon":	"assets/items/empty.png"
+			"icon":	"assets/items/Black_Ring.png"
 		}]
 }

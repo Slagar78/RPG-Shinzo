@@ -6,7 +6,7 @@
       "level": 1,
       "items": [
         { "item": "Short Sword", "equipped": true },
-        { "item": "Medical Herb", "equipped": true },
+        { "item": "Black Ring", "equipped": true },
         { "item": "Medical Herb", "equipped": false },
         { "item": "Medical Herb", "equipped": false }
       ]
