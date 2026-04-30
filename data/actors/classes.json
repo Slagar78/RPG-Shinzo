@@ -2,7 +2,7 @@
 	"classes":	[{
 			"id":	0,
 			"name":	"SDMN",
-			"full_name":	"Swordhero",
+			"full_name":	"SDMN",
 			"move":	6,
 			"move_type":	"REGULAR",
 			"hp_growth":	{
