@@ -241,7 +241,7 @@ int save_spells_to_file() {
     cJSON *root = cJSON_CreateObject();
     cJSON *dup = cJSON_Duplicate(spells_json, 1);
     cJSON_AddItemToObject(root, "spells", dup);
-    char *json_str = cJSON_Print(root);
+    char *json_str = cJSON_PrintBuffered(root, 0, 1);
     FILE *f = fopen("../data/spells/spells.json", "w");
     if (f) {
         fputs(json_str, f);

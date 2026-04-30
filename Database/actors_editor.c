@@ -440,7 +440,7 @@ void actors_save_to_file(void) {
     cJSON *root = cJSON_CreateObject();
     cJSON *dup = cJSON_Duplicate(actors, 1);
     cJSON_AddItemToObject(root, "actors", dup);
-    char *js = cJSON_Print(root);
+    char *js = cJSON_PrintBuffered(root, 0, 1);
     FILE *f = fopen("../data/actors/actors.json", "w");
     if (f) { fputs(js, f); fclose(f); error_msg[0] = '\0'; }
     else snprintf(error_msg, sizeof(error_msg), "Failed to save actors.json");

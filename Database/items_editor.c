@@ -494,11 +494,12 @@ void items_save_to_file(void) {
     cJSON *root = cJSON_CreateObject();
     cJSON *dup = cJSON_Duplicate(items, 1);
     cJSON_AddItemToObject(root, "items", dup);
-    char *js = cJSON_Print(root);
+    char *js = cJSON_PrintBuffered(root, 0, 1);
     FILE *f = fopen("../data/items/items.json", "w");
     if (f) { fputs(js, f); fclose(f); error_msg[0] = '\0'; }
     else snprintf(error_msg, sizeof(error_msg), "Failed to save items.json");
-    free(js); cJSON_Delete(root);
+    free(js);
+    cJSON_Delete(root);
     save_timer = SAVE_BLINK_DURATION;
 }
 
