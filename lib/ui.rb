@@ -182,8 +182,8 @@ end
    end
 	
     # Загружаем заклинания
-    if File.exist?("data/actors/spells.json")
-     data = JSON.parse(File.read("data/actors/spells.json"))
+    if File.exist?("data/spells/spells.json")
+     data = JSON.parse(File.read("data/spells/spells.json"))
      @all_spells = data["spells"] || []
     else
       @all_spells = []
@@ -1108,8 +1108,8 @@ def draw_item_name(text, x, y, size, color)
   # Найти предмет по имени в items.json
   def find_item_by_name(name)
     unless @items_data
-      if File.exist?("data/actors/items.json")
-        data = JSON.parse(File.read("data/actors/items.json"))
+      if File.exist?("data/items/items.json")
+        data = JSON.parse(File.read("data/items/items.json"))
         @items_data = data["items"] || []
       else
         @items_data = []
@@ -1121,8 +1121,8 @@ def draw_item_name(text, x, y, size, color)
   # Найти иконку заклинания по имени и уровню в spells.json
   def find_spell_icon(name, level)
     unless @spells_data
-      if File.exist?("data/actors/spells.json")
-        data = JSON.parse(File.read("data/actors/spells.json"))
+      if File.exist?("data/spells/spells.json")
+        data = JSON.parse(File.read("data/spells/spells.json"))
         @spells_data = data["spells"] || []
       else
         @spells_data = []
@@ -1219,8 +1219,8 @@ end
    end
 	
     # Загружаем заклинания
-    if File.exist?("data/actors/spells.json")
-     data = JSON.parse(File.read("data/actors/spells.json"))
+    if File.exist?("data/spells/spells.json")
+     data = JSON.parse(File.read("data/spells/spells.json"))
      @all_spells = data["spells"] || []
     else
       @all_spells = []
@@ -1756,8 +1756,8 @@ end
 
   def find_spell_icon(name, level)
     unless @spells_data
-      if File.exist?("data/actors/spells.json")
-        data = JSON.parse(File.read("data/actors/spells.json"))
+      if File.exist?("data/spells/spells.json")
+        data = JSON.parse(File.read("data/spells/spells.json"))
         @spells_data = data["spells"] || []
       else
         @spells_data = []

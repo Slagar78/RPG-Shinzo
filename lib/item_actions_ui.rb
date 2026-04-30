@@ -82,8 +82,8 @@ module ItemUIHelpers
 
   def find_item_by_name(name)
     unless @items_data
-      if File.exist?("data/actors/items.json")
-        data = JSON.parse(File.read("data/actors/items.json"))
+      if File.exist?("data/items/items.json")
+        data = JSON.parse(File.read("data/items/items.json"))
         @items_data = data["items"] || []
       else
         @items_data = []
