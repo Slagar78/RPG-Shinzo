@@ -4,6 +4,7 @@
 #include <SDL_ttf.h>
 #include "../cJSON.h"
 #include "items_editor.h"
+#include "actors_editor.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -588,6 +589,7 @@ int main(int argc, char *argv[]) {
     load_all();
     if (spells_json) build_spell_groups();
     items_init(items_json, items_count);   // инициализация модуля предметов
+	actors_init(actors_json, actors_count);
 
     SDL_Color white = {255,255,255}, red = {255,80,80}, blue = {80,160,255}, green_text = {0,200,0};
     SDL_Color cyan = {0,200,255}, yellow = {255,255,0,255}, bright_green = {0,255,0,255};
@@ -607,6 +609,7 @@ int main(int argc, char *argv[]) {
             if (evt.type == SDL_MOUSEWHEEL) {
                 if (current_tab == TAB_SPELLS) spell_scroll -= evt.wheel.y * 30;
                 else if (current_tab == TAB_ITEMS) items_adjust_scroll(evt.wheel.y * 30);
+				else if (current_tab == TAB_ACTORS) actors_adjust_scroll(evt.wheel.y * 30);
             }
 
             // Обработка полей ввода (Spells)
@@ -620,6 +623,11 @@ int main(int argc, char *argv[]) {
             else if (current_tab == TAB_ITEMS) {
                 items_handle_input(&evt);
                 if (items_is_edit_active() && (evt.type == SDL_KEYDOWN || evt.type == SDL_TEXTINPUT))
+                    continue;
+            }
+			else if (current_tab == TAB_ACTORS) {
+                actors_handle_input(&evt);
+                if (actors_is_edit_active() && (evt.type == SDL_KEYDOWN || evt.type == SDL_TEXTINPUT))
                     continue;
             }
 
@@ -637,6 +645,7 @@ int main(int argc, char *argv[]) {
                             edit_field_count = 0; active_field_index = -1;
                             spell_scroll = 0;
                             items_reset_selection();
+							actors_reset_selection();
                             if (current_tab == TAB_SPELLS && spells_json) build_spell_groups();
                             break;
                         }
@@ -721,6 +730,9 @@ int main(int argc, char *argv[]) {
                 else if (current_tab == TAB_ITEMS) {
                     items_handle_click(mx, my, tab_h + 5, items_get_scroll());
                 }
+				else if (current_tab == TAB_ACTORS) {
+                actors_handle_click(mx, my, tab_h + 5, actors_get_scroll());
+                }
             }
         }
 
@@ -792,6 +804,9 @@ int main(int argc, char *argv[]) {
         else if (current_tab == TAB_ITEMS) {
             items_draw_list(renderer, tab_h + 5, items_get_scroll());
         }
+		else if (current_tab == TAB_ACTORS) {
+            actors_draw_list(renderer, tab_h + 5, actors_get_scroll());
+        }
 
         // Панель редактирования Spells
         if (current_tab == TAB_SPELLS) {
@@ -853,8 +868,13 @@ int main(int argc, char *argv[]) {
         if (current_tab == TAB_ITEMS) {
             items_draw_edit_panel(renderer, 360, tab_h + 20);
         }
+		if (current_tab == TAB_ACTORS) {
+           actors_draw_edit_panel(renderer, 360, tab_h + 20);
+        }
 
-        if (save_timer > 0) save_timer--;   // для spells (items имеет свой таймер)
+        if (save_timer > 0) save_timer--;
+			actors_update_timer();
+            items_update_timer();  //
 
         SDL_RenderPresent(renderer);
         SDL_Delay(16);

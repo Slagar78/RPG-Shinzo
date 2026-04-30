@@ -16,5 +16,6 @@ int  items_is_edit_active();
 void items_reset_selection();
 void items_adjust_scroll(int delta);
 int  items_get_scroll();
+void items_update_timer(void);
 
 #endif

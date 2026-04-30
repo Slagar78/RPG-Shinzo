@@ -504,6 +504,10 @@ void items_save_to_file(void) {
 
 int items_is_edit_active(void) { return item_active_field >= 0; }
 
+void items_update_timer(void) {
+    if (save_timer > 0) save_timer--;
+}
+
 void items_reset_selection(void) {
     if (item_count > 0) { selected_item = 0; load_item_fields(); }
     else { selected_item = -1; item_active_field = -1; item_field_count = 0; }
