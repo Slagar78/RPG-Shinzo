@@ -37,8 +37,9 @@ static int  current_level_count = 0;
 static int  selected_level_idx = -1;
 
 static int save_timer = 0;
-#define SAVE_BLINK_DURATION 90
+#define SAVE_BLINK_DURATION 42
 static int item_scroll = 0;
+static int g_window_height = 680;
 
 #define MAX_ITEM_FIELDS 10
 typedef struct {
@@ -509,12 +510,26 @@ void items_update_timer(void) {
     if (save_timer > 0) save_timer--;
 }
 
+void items_set_window_height(int h) {
+    g_window_height = h;
+}
+
 void items_reset_selection(void) {
     if (item_count > 0) { selected_item = 0; load_item_fields(); }
     else { selected_item = -1; item_active_field = -1; item_field_count = 0; }
 }
 
-void items_adjust_scroll(int delta) { item_scroll -= delta; }
+void items_adjust_scroll(int delta) {
+    item_scroll -= delta;
+    // Не выше первого элемента
+    if (item_scroll < 0) item_scroll = 0;
+    // Не ниже последнего элемента
+    int total_h = items_get_total_height();
+    int visible_h = g_window_height - 35; // 35 = tab_h + 5 (высота вкладок и отступ)
+    int max_scroll = total_h > visible_h ? total_h - visible_h : 0;
+    if (item_scroll > max_scroll) item_scroll = max_scroll;
+}
+
 int items_get_scroll(void) { return item_scroll; }
 
 void items_draw_list(SDL_Renderer *renderer, int y_offset, int scroll) {

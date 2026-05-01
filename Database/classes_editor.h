@@ -18,5 +18,6 @@ void classes_adjust_scroll(int delta);
 int  classes_get_scroll(void);
 void classes_reload(void);
 void classes_update_timer(void);
+void classes_set_window_height(int h);
 
 #endif

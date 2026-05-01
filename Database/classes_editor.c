@@ -29,7 +29,7 @@ char* open_file_dialog();
 #define MAX_VISIBLE_SPELLS 4
 #define MAX_CLASS_FIELDS 30
 #define BLINK_SPEED 30
-#define SAVE_BLINK_DURATION 90
+#define SAVE_BLINK_DURATION 42
 // ======================================================================
 
 static cJSON *classes = NULL;
@@ -91,6 +91,7 @@ static int class_field_count = 0;
 static int class_active_field = -1;
 
 static int last_btn_y = 0;
+static int g_window_height = 680; // значение по умолчанию
 
 // Прототипы функций
 static void build_curve_list(void);
@@ -933,8 +934,19 @@ void classes_reset_selection(void) {
     if (class_count > 0) { selected_class = 0; load_class_fields(); }
     else { selected_class = -1; class_active_field = -1; class_field_count = 0; }
 }
-void classes_adjust_scroll(int delta) { class_scroll -= delta; }
+void classes_adjust_scroll(int delta) {
+    class_scroll -= delta;
+    // Не выше первого элемента
+    if (class_scroll < 0) class_scroll = 0;
+    // Не ниже последнего элемента
+    int total_h = classes_get_total_height();
+    int visible_h = g_window_height - 35; // 35 = tab_h + 5 (высота вкладок и отступ)
+    int max_scroll = total_h > visible_h ? total_h - visible_h : 0;
+    if (class_scroll > max_scroll) class_scroll = max_scroll;
+}
+
 int classes_get_scroll(void) { return class_scroll; }
+
 void classes_draw_list(SDL_Renderer *renderer, int y_offset, int scroll) {
     if (!classes) return;
     int y = y_offset - scroll;
@@ -1006,4 +1018,7 @@ static void update_spell_levels(void) {
     }
 }
 
+void classes_set_window_height(int h) {
+    g_window_height = h;
+}
 void classes_update_timer(void) { if (save_timer > 0) save_timer--; }

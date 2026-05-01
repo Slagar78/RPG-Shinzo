@@ -17,5 +17,6 @@ void items_reset_selection();
 void items_adjust_scroll(int delta);
 int  items_get_scroll();
 void items_update_timer(void);
+void items_set_window_height(int h);
 
 #endif

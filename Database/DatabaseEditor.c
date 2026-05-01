@@ -71,7 +71,7 @@ int active_field_index = -1;
 
 // Кнопка Save (spells)
 int save_timer = 0;
-#define SAVE_BLINK_DURATION 90
+#define SAVE_BLINK_DURATION 42
 
 // Прокрутка списка заклинаний
 int spell_scroll = 0;
@@ -595,9 +595,12 @@ int main(int argc, char *argv[]) {
     g_font_ok = (g_font != NULL);
     load_all();
     if (spells_json) build_spell_groups();
-    items_init(items_json, items_count);   // инициализация модуля предметов
-	actors_init(actors_json, actors_count);
-	classes_init(classes_json, classes_count);
+    items_init(items_json, items_count);
+	items_set_window_height(WINDOW_HEIGHT);
+    actors_init(actors_json, actors_count);
+    actors_set_window_height(WINDOW_HEIGHT);
+    classes_init(classes_json, classes_count);
+    classes_set_window_height(WINDOW_HEIGHT);
 
     SDL_Color white = {255,255,255}, red = {255,80,80}, blue = {80,160,255}, green_text = {0,200,0};
     SDL_Color cyan = {0,200,255}, yellow = {255,255,0,255}, bright_green = {0,255,0,255};

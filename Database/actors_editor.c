@@ -41,8 +41,9 @@ static int selected_class_idx = -1;   // индекс в class_list
 
 // кнопки
 static int save_timer = 0;
-#define SAVE_BLINK_DURATION 90
+#define SAVE_BLINK_DURATION 42
 static int actor_scroll = 0;
+static int g_window_height = 680;   // высота окна по умолчанию
 
 // поля ввода (EditField)
 #define MAX_ACTOR_FIELDS 10
@@ -459,7 +460,16 @@ void actors_reset_selection(void) {
     else { selected_actor = -1; actor_active_field = -1; actor_field_count = 0; }
 }
 
-void actors_adjust_scroll(int delta) { actor_scroll -= delta; }
+void actors_adjust_scroll(int delta) {
+    actor_scroll -= delta;
+    // Не выше первого элемента
+    if (actor_scroll < 0) actor_scroll = 0;
+    // Не ниже последнего элемента
+    int total_h = actors_get_total_height();
+    int visible_h = g_window_height - 35; // 35 = tab_h + 5 (высота вкладок и отступ)
+    int max_scroll = total_h > visible_h ? total_h - visible_h : 0;
+    if (actor_scroll > max_scroll) actor_scroll = max_scroll;
+}
 int actors_get_scroll(void) { return actor_scroll; }
 
 void actors_draw_list(SDL_Renderer *renderer, int y_offset, int scroll) {
@@ -648,4 +658,8 @@ void actors_handle_input(SDL_Event *evt) {
             return;
         }
     }
+}
+
+void actors_set_window_height(int h) {
+    g_window_height = h;
 }

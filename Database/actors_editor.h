@@ -17,6 +17,7 @@ void actors_reset_selection(void);
 void actors_adjust_scroll(int delta);
 int  actors_get_scroll(void);
 void actors_reload(void);
+void actors_set_window_height(int h);
 void actors_update_timer(void);
 
 #endif
