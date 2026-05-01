@@ -14,6 +14,12 @@
 #include <commdlg.h>
 #include "formatter.h"
 
+#ifdef _WIN32
+#define strcasecmp _stricmp
+#else
+#include <strings.h>
+#endif
+
 #define WINDOW_WIDTH 960
 #define WINDOW_HEIGHT 680
 
@@ -86,6 +92,7 @@ void get_current_data(cJSON **arr, int *count);
 void add_new_spell();
 int get_max_spell_id();
 void get_next_magic_name(char *buf, int size);
+void normalize_spell_name(char *name);
 
 // Безопасное получение строки/числа из cJSON
 const char* json_string(cJSON *item, const char *key) {
@@ -165,7 +172,7 @@ void build_spell_groups() {
         const char *name = json_string(spell, "name");
         int found = -1;
         for (int g = 0; g < group_count; g++)
-            if (strcmp(groups[g].name, name) == 0) { found = g; break; }
+            if (strcasecmp(groups[g].name, name) == 0) { found = g; break; }
         if (found == -1) {
             if (group_count >= MAX_SPELL_GROUPS) break;
             strncpy(groups[group_count].name, name, 63);
@@ -233,9 +240,9 @@ int has_duplicate_spells() {
         int level_a = json_int(a, "level", -1);
         for (int j = i + 1; j < spells_count; j++) {
             cJSON *b = cJSON_GetArrayItem(spells_json, j);
-            if (strcmp(json_string(b, "name"), name_a) == 0 &&
-                json_int(b, "level", -1) == level_a) {
-                return 1;
+            if (strcasecmp(json_string(b, "name"), name_a) == 0 &&
+            json_int(b, "level", -1) == level_a) {
+            return 1;
             }
         }
     }
@@ -347,15 +354,18 @@ void commit_field(int idx) {
     EditField *f = &edit_fields[idx];
     if (!f->json_obj) return;
     if (f->json_key) {
-        if (f->is_numeric) {
-            int v = atoi(f->text);
-            cJSON *num = cJSON_GetObjectItem(f->json_obj, f->json_key);
-            if (num && cJSON_IsNumber(num)) { num->valueint = v; num->valuedouble = v; }
-        } else {
-            cJSON *str = cJSON_GetObjectItem(f->json_obj, f->json_key);
-            if (str && cJSON_IsString(str)) cJSON_SetValuestring(str, f->text);
+    if (f->is_numeric) {
+        // ... (числовые поля)
+    } else {
+        // Для имени нормализуем регистр
+        if (strcmp(f->json_key, "name") == 0) {
+            normalize_spell_name(f->text);
         }
-    } else if (f->array_index >= 0) {
+        cJSON *str = cJSON_GetObjectItem(f->json_obj, f->json_key);
+        if (str && cJSON_IsString(str)) cJSON_SetValuestring(str, f->text);
+    }
+}
+	else if (f->array_index >= 0) {
         cJSON *arr = cJSON_GetObjectItem(f->json_obj, "range");
         if (!arr) {
             arr = cJSON_CreateArray();
@@ -506,6 +516,7 @@ void add_new_spell() {
     int new_id = get_max_spell_id() + 1;
     char new_name[64];
     get_next_magic_name(new_name, sizeof(new_name));
+	normalize_spell_name(new_name);
 
     cJSON *new_spell = cJSON_CreateObject();
     cJSON_AddNumberToObject(new_spell, "id", new_id);
@@ -564,6 +575,14 @@ void get_next_magic_name(char *buf, int size) {
         }
         if (!found) break;
         idx++;
+    }
+}
+
+void normalize_spell_name(char *name) {
+    if (!name || !*name) return;
+    name[0] = toupper((unsigned char)name[0]);
+    for (int i = 1; name[i]; i++) {
+        name[i] = tolower((unsigned char)name[i]);
     }
 }
 

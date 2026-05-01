@@ -79,5 +79,15 @@
 			"radius":	1,
 			"power":	5,
 			"icon":	"assets/spells/magic_empty.png"
+		}, {
+			"id":	11,
+			"name":	"Normale",
+			"level":	1,
+			"mp":	5,
+			"type":	"heal",
+			"range":	[0, 3],
+			"radius":	1,
+			"power":	5,
+			"icon":	"assets/spells/magic_empty.png"
 		}]
 }
