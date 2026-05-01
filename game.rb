@@ -289,6 +289,7 @@ class Game
 	@pending_menu_open = false
 	@active_item_action = nil   # будет хранить текущее окно (Use/Give/...)
 	@pending_items_close = false
+	@pending_menu_request = false   # ждём завершения шага, чтобы открыть меню
 
     # ── 2D-камера для следования за игроком ─────
     @camera = Camera2D.new
@@ -317,8 +318,12 @@ def handle_input
   case @game_state
   when :playing
     if IsKeyPressed(KEY_A) || IsKeyPressed(KEY_D)
-      @game_state = :menu
-      @menu.open
+      if @player.moving
+        @pending_menu_request = true      # запоминаем
+      else
+        @game_state = :menu
+        @menu.open
+      end
     else
       @player.handle_input
     end
@@ -406,6 +411,11 @@ end
     @audio.update
     @player.update_animation
     @player.update_movement if @game_state == :playing
+	if @pending_menu_request && !@player.moving
+      @pending_menu_request = false
+      @game_state = :menu
+      @menu.open
+    end
     @menu.update if @game_state == :menu
 	@items_submenu.update if @game_state == :items   
 	@status_overlay.update if @game_state == :status
