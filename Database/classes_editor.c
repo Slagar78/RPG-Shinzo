@@ -21,6 +21,10 @@ static cJSON *classes = NULL;
 static int class_count = 0;
 static int selected_class = -1;
 static int last_spell_btns_y = 0;
+static int up_arrow_rect_y = 0;
+static int down_arrow_rect_y = 0;
+
+#define BLINK_SPEED 30              // через сколько кадров менять состояние
 
 static char  name_buf[11] = {0};
 static char  full_name_buf[17] = {0};
@@ -56,8 +60,8 @@ static int save_timer = 0;
 #define SAVE_BLINK_DURATION 90
 static int class_scroll = 0;
 static int spell_list_scroll = 0;
-#define MAX_VISIBLE_SPELLS 6
 
+#define MAX_VISIBLE_SPELLS 4  // сколько заклинаний показывать одновременно
 #define MAX_CLASS_FIELDS 30
 typedef struct {
     char text[256];
@@ -416,6 +420,7 @@ static void draw_class_field(SDL_Renderer *r, int x, int y, int w, int h, int id
 void classes_draw_edit_panel(SDL_Renderer *renderer, int px, int py) {
     if (selected_class < 0) return;
     SDL_Color black = {0,0,0,255}, white = {255,255,255}, blue = {70,70,120};
+    SDL_Color gray = {100,100,100};
     SDL_Rect panel = {px, py, 580, 550};
     SDL_SetRenderDrawColor(renderer, 60,60,60,255); SDL_RenderFillRect(renderer, &panel);
     SDL_SetRenderDrawColor(renderer, 255,255,255,255); SDL_RenderDrawRect(renderer, &panel);
@@ -424,16 +429,12 @@ void classes_draw_edit_panel(SDL_Renderer *renderer, int px, int py) {
     cJSON *cls = cJSON_GetArrayItem(classes, selected_class);
     int cid = cJSON_GetObjectItem(cls, "id")->valueint;
     char idstr[16]; snprintf(idstr, sizeof(idstr), "ID:%d", cid);
-    // ID – напротив поля Name (поле Name теперь визуально правее)
     draw_text_ext(renderer, px + 280, y + 3, idstr, white);
 
-    // Name: надпись на px+10, поле сдвинуто вправо на 30 (field_extra_x=30)
     draw_class_field(renderer, px + 10, y, 150, 22, 0, "Name:", name_buf, 30);
     y += 35;
-    // Full Name – аналогично
     draw_class_field(renderer, px + 10, y, 150, 22, 1, "Full Name:", full_name_buf, 30);
     y += 35;
-    // Move – без сдвига
     char mvstr[8]; snprintf(mvstr, sizeof(mvstr), "%d", move_val);
     draw_class_field(renderer, px + 10, y, 70, 22, 2, "Move:", mvstr, 0);
     y += 35;
@@ -443,23 +444,19 @@ void classes_draw_edit_panel(SDL_Renderer *renderer, int px, int py) {
         snprintf(start_str, sizeof(start_str), "%d", growth[s].start);
         snprintf(proj_str, sizeof(proj_str), "%d", growth[s].projected);
         int base_idx = 3 + s*3;
-        // Названия кривых сдвинуты левее (px-20)
         draw_text_ext(renderer, px+10, y+3, growth_names[s], white);
-        
-		draw_class_field(renderer, px+80, y, 70, 22, base_idx, "Start", start_str, 0);
-        // Рисуем стрелку отдельно, уже после поля Start
-        draw_text_ext(renderer, px+225, y+3, "→", white);   // px - позиция стрелки
+        draw_class_field(renderer, px+80, y, 70, 22, base_idx, "Start", start_str, 0);
+        draw_text_ext(renderer, px+225, y+3, "→", white);
         draw_class_field(renderer, px+190, y, 70, 22, base_idx+1, "", proj_str, 0);
-		
-        draw_text_ext(renderer, px+350, y+3, growth[s].curve, white); //двигать название кривых роста
+        draw_text_ext(renderer, px+350, y+3, growth[s].curve, white);
         SDL_Rect prev = {px+480, y, 20, 22};
         SDL_SetRenderDrawColor(renderer, blue.r, blue.g, blue.b, 255); SDL_RenderFillRect(renderer, &prev);
         SDL_SetRenderDrawColor(renderer, white.r, white.g, white.b, 255); SDL_RenderDrawRect(renderer, &prev);
-        draw_text_ext(renderer, px+485, y+3, "<", white);   // было 485
+        draw_text_ext(renderer, px+485, y+3, "<", white);
         SDL_Rect next = {px+505, y, 20, 22};
         SDL_SetRenderDrawColor(renderer, blue.r, blue.g, blue.b, 255); SDL_RenderFillRect(renderer, &next);
         SDL_SetRenderDrawColor(renderer, white.r, white.g, white.b, 255); SDL_RenderDrawRect(renderer, &next);
-        draw_text_ext(renderer, px+510, y+3, ">", white);   // было 510
+        draw_text_ext(renderer, px+510, y+3, ">", white);
         y += 35;
     }
 
@@ -470,16 +467,19 @@ void classes_draw_edit_panel(SDL_Renderer *renderer, int px, int py) {
     const int visible = MAX_VISIBLE_SPELLS;
     const int total = class_spell_count;
 
-    if (spell_list_scroll > 0) {
-        SDL_Rect up_arrow = {px+20, y, 20, 20};
-        SDL_SetRenderDrawColor(renderer, blue.r, blue.g, blue.b, 255);
-        SDL_RenderFillRect(renderer, &up_arrow);
-        SDL_SetRenderDrawColor(renderer, white.r, white.g, white.b, 255);
-        SDL_RenderDrawRect(renderer, &up_arrow);
-        draw_text_ext(renderer, up_arrow.x+5, up_arrow.y+2, "^", white);
-    }
-    y += (spell_list_scroll > 0) ? 22 : 0;
+    // ----- Стрелка вверх (всегда рисуем) -----
+    int up_possible = (spell_list_scroll > 0);
+    SDL_Color up_color = up_possible ? blue : gray;
+    up_arrow_rect_y = y;  // запоминаем Y для обработчика кликов
+    SDL_Rect up_arrow = {px+20, y, 30, 30};
+    SDL_SetRenderDrawColor(renderer, up_color.r, up_color.g, up_color.b, 255);
+    SDL_RenderFillRect(renderer, &up_arrow);
+    SDL_SetRenderDrawColor(renderer, white.r, white.g, white.b, 255);
+    SDL_RenderDrawRect(renderer, &up_arrow);
+    draw_text_ext(renderer, up_arrow.x+10, up_arrow.y+5, "^", white);
+    y += 30;   // сдвигаем после стрелки
 
+    // ----- Список заклинаний -----
     for (int i = spell_list_scroll; i < total && i < spell_list_scroll + visible; i++) {
         char buf[128];
         snprintf(buf, sizeof(buf), "Lv %d: %s (Lv %d)", class_spells[i].level,
@@ -493,15 +493,17 @@ void classes_draw_edit_panel(SDL_Renderer *renderer, int px, int py) {
         y += 20;
     }
 
-    if (spell_list_scroll + visible < total) {
-        SDL_Rect down_arrow = {px+20, y, 20, 20};
-        SDL_SetRenderDrawColor(renderer, blue.r, blue.g, blue.b, 255);
-        SDL_RenderFillRect(renderer, &down_arrow);
-        SDL_SetRenderDrawColor(renderer, white.r, white.g, white.b, 255);
-        SDL_RenderDrawRect(renderer, &down_arrow);
-        draw_text_ext(renderer, down_arrow.x+5, down_arrow.y+2, "v", white);
-        y += 22;
-    }
+    // ----- Стрелка вниз (всегда рисуем) -----
+    int down_possible = (spell_list_scroll + visible < total);
+    SDL_Color down_color = down_possible ? blue : gray;
+    down_arrow_rect_y = y;  // запоминаем Y
+    SDL_Rect down_arrow = {px+20, y, 30, 30};
+    SDL_SetRenderDrawColor(renderer, down_color.r, down_color.g, down_color.b, 255);
+    SDL_RenderFillRect(renderer, &down_arrow);
+    SDL_SetRenderDrawColor(renderer, white.r, white.g, white.b, 255);
+    SDL_RenderDrawRect(renderer, &down_arrow);
+    draw_text_ext(renderer, down_arrow.x+10, down_arrow.y+5, "v", white);
+    y += 30;
 
     // Кнопки Add / Delete
     SDL_Rect spell_add_btn = {px+20, y, 20, 20};
@@ -517,7 +519,7 @@ void classes_draw_edit_panel(SDL_Renderer *renderer, int px, int py) {
     SDL_SetRenderDrawColor(renderer, 0,0,0,255);
     SDL_RenderDrawRect(renderer, &spell_del_btn);
     draw_text_ext(renderer, spell_del_btn.x+5, spell_del_btn.y+2, "-", black);
-	last_spell_btns_y = y;   // ← сохраняем текущий Y
+    last_spell_btns_y = y;   // сохраняем Y для кнопок +/-
 
     y += 24;
 
@@ -556,14 +558,16 @@ void classes_handle_input(SDL_Event *evt) {
     if (evt->type == SDL_MOUSEBUTTONDOWN && evt->button.button == SDL_BUTTON_LEFT) {
         int mx = evt->button.x, my = evt->button.y;
         if (selected_class < 0) return;
+
         int px = 360, py = 50;
         int base_y = py + 10;
 
-        int growth_offset_y = base_y + 3*35;   // ← исправлено
-    for (int s = 0; s < 5; s++) {
-    SDL_Rect prev = {px+480, growth_offset_y + s*35, 20, 22};
-    SDL_Rect next = {px+505, growth_offset_y + s*35, 20, 22};
-            if (mx >= prev.x && mx < prev.x+prev.w && my >= prev.y && my < prev.y+prev.h) {
+        // Стрелки кривых роста
+        int growth_offset_y = base_y + 3 * 35;
+        for (int s = 0; s < 5; s++) {
+            SDL_Rect prev = {px + 480, growth_offset_y + s * 35, 20, 22};
+            SDL_Rect next = {px + 505, growth_offset_y + s * 35, 20, 22};
+            if (mx >= prev.x && mx < prev.x + prev.w && my >= prev.y && my < prev.y + prev.h) {
                 if (curve_count > 0 && selected_curve_idx[s] > 0) {
                     selected_curve_idx[s]--;
                     strncpy(growth[s].curve, curve_names[selected_curve_idx[s]], 63);
@@ -571,8 +575,8 @@ void classes_handle_input(SDL_Event *evt) {
                 }
                 return;
             }
-            if (mx >= next.x && mx < next.x+next.w && my >= next.y && my < next.y+next.h) {
-                if (curve_count > 0 && selected_curve_idx[s] < curve_count-1) {
+            if (mx >= next.x && mx < next.x + next.w && my >= next.y && my < next.y + next.h) {
+                if (curve_count > 0 && selected_curve_idx[s] < curve_count - 1) {
                     selected_curve_idx[s]++;
                     strncpy(growth[s].curve, curve_names[selected_curve_idx[s]], 63);
                     commit_class_changes();
@@ -581,44 +585,43 @@ void classes_handle_input(SDL_Event *evt) {
             }
         }
 
-        int y_spell = base_y + 4*35 + 5*35 + 10;
-        int list_y = y_spell + 22;
-        if (spell_list_scroll > 0) list_y += 22;
+        // Стрелка вверх списка заклинаний
+        SDL_Rect up_arrow = {px + 20, up_arrow_rect_y, 30, 30};
+        if (spell_list_scroll > 0 && mx >= up_arrow.x && mx < up_arrow.x + up_arrow.w &&
+            my >= up_arrow.y && my < up_arrow.y + up_arrow.h) {
+            spell_list_scroll--;
+            return;
+        }
+
+        // Y первого элемента списка
+        int first_item_y = up_arrow_rect_y + 30;
         int visible = MAX_VISIBLE_SPELLS;
         int total = class_spell_count;
 
-        if (spell_list_scroll > 0) {
-            SDL_Rect up_arrow = {px+20, y_spell + 22, 20, 20};
-            if (mx >= up_arrow.x && mx < up_arrow.x+up_arrow.w &&
-                my >= up_arrow.y && my < up_arrow.y+up_arrow.h) {
-                spell_list_scroll--;
-                return;
-            }
-        }
-
-        if (spell_list_scroll + visible < total) {
-            int down_y = list_y + visible * 20;
-            SDL_Rect down_arrow = {px+20, down_y, 20, 20};
-            if (mx >= down_arrow.x && mx < down_arrow.x+down_arrow.w &&
-                my >= down_arrow.y && my < down_arrow.y+down_arrow.h) {
-                spell_list_scroll++;
-                return;
-            }
-        }
-
+        // Элементы списка
         for (int i = spell_list_scroll; i < total && i < spell_list_scroll + visible; i++) {
-            SDL_Rect item = {px+20, list_y + (i - spell_list_scroll) * 20, 400, 20};
-            if (mx >= item.x && mx < item.x+item.w && my >= item.y && my < item.y+item.h) {
+            SDL_Rect item = {px + 20, first_item_y + (i - spell_list_scroll) * 20, 400, 20};
+            if (mx >= item.x && mx < item.x + item.w && my >= item.y && my < item.y + item.h) {
                 selected_spell_entry = i;
                 return;
             }
         }
 
-        // используем сохранённое значение
-        SDL_Rect spell_add_btn = {px+20, last_spell_btns_y, 20, 20};
-        SDL_Rect spell_del_btn = {px+50, last_spell_btns_y, 20, 20};
-		
-        if (mx >= spell_add_btn.x && mx < spell_add_btn.x+spell_add_btn.w && my >= spell_add_btn.y && my < spell_add_btn.y+spell_add_btn.h) {
+        // Стрелка вниз
+        SDL_Rect down_arrow = {px + 20, down_arrow_rect_y, 30, 30};
+        if (spell_list_scroll + visible < total &&
+            mx >= down_arrow.x && mx < down_arrow.x + down_arrow.w &&
+            my >= down_arrow.y && my < down_arrow.y + down_arrow.h) {
+            spell_list_scroll++;
+            return;
+        }
+
+        // Кнопки + / -
+        SDL_Rect spell_add_btn = {px + 20, last_spell_btns_y, 20, 20};
+        SDL_Rect spell_del_btn = {px + 50, last_spell_btns_y, 20, 20};
+
+        if (mx >= spell_add_btn.x && mx < spell_add_btn.x + spell_add_btn.w &&
+            my >= spell_add_btn.y && my < spell_add_btn.y + spell_add_btn.h) {
             if (class_spell_count < MAX_SPELLS_PER_CLASS) {
                 class_spells[class_spell_count].level = 1;
                 strncpy(class_spells[class_spell_count].spell_name, "HEAL", 63);
@@ -630,12 +633,15 @@ void classes_handle_input(SDL_Event *evt) {
             }
             return;
         }
-        if (mx >= spell_del_btn.x && mx < spell_del_btn.x+spell_del_btn.w && my >= spell_del_btn.y && my < spell_del_btn.y+spell_del_btn.h) {
-            if (selected_spell_entry >= 0 && selected_spell_entry < class_spell_count) {
-                for (int i = selected_spell_entry; i < class_spell_count - 1; i++)
-                    class_spells[i] = class_spells[i+1];
+
+        if (mx >= spell_del_btn.x && mx < spell_del_btn.x + spell_del_btn.w &&
+            my >= spell_del_btn.y && my < spell_del_btn.y + spell_del_btn.h) {
+            int idx_to_remove = (selected_spell_entry >= 0) ? selected_spell_entry : class_spell_count - 1;
+            if (class_spell_count > 0 && idx_to_remove >= 0 && idx_to_remove < class_spell_count) {
+                for (int i = idx_to_remove; i < class_spell_count - 1; i++)
+                    class_spells[i] = class_spells[i + 1];
                 class_spell_count--;
-                selected_spell_entry = -1;
+                if (selected_spell_entry >= class_spell_count) selected_spell_entry = -1;
                 if (spell_list_scroll > 0 && class_spell_count <= spell_list_scroll)
                     spell_list_scroll = class_spell_count - visible;
                 if (spell_list_scroll < 0) spell_list_scroll = 0;
@@ -644,22 +650,32 @@ void classes_handle_input(SDL_Event *evt) {
             return;
         }
 
+        // Основные кнопки
         int btn_y = last_btn_y;
-        SDL_Rect save_btn = {px+130, btn_y, 80, 30};
-        SDL_Rect refresh_btn = {px+220, btn_y, 80, 30};
-        SDL_Rect del_btn = {px+10, btn_y, 100, 30};
-        SDL_Rect add_btn = {px+310, btn_y, 100, 30};
-        if (mx >= save_btn.x && mx < save_btn.x+save_btn.w && my >= save_btn.y && my < save_btn.y+save_btn.h) {
-            classes_save_to_file(); return;
+        SDL_Rect save_btn   = {px + 130, btn_y, 80, 30};
+        SDL_Rect refresh_btn= {px + 220, btn_y, 80, 30};
+        SDL_Rect del_btn    = {px + 10,  btn_y, 100, 30};
+        SDL_Rect add_btn    = {px + 310, btn_y, 100, 30};
+
+        if (mx >= save_btn.x && mx < save_btn.x + save_btn.w &&
+            my >= save_btn.y && my < save_btn.y + save_btn.h) {
+            classes_save_to_file();
+            return;
         }
-        if (mx >= refresh_btn.x && mx < refresh_btn.x+refresh_btn.w && my >= refresh_btn.y && my < refresh_btn.y+refresh_btn.h) {
-            classes_reload(); return;
+        if (mx >= refresh_btn.x && mx < refresh_btn.x + refresh_btn.w &&
+            my >= refresh_btn.y && my < refresh_btn.y + refresh_btn.h) {
+            classes_reload();
+            return;
         }
-        if (mx >= del_btn.x && mx < del_btn.x+del_btn.w && my >= del_btn.y && my < del_btn.y+del_btn.h) {
-            delete_class(); return;
+        if (mx >= del_btn.x && mx < del_btn.x + del_btn.w &&
+            my >= del_btn.y && my < del_btn.y + del_btn.h) {
+            delete_class();
+            return;
         }
-        if (mx >= add_btn.x && mx < add_btn.x+add_btn.w && my >= add_btn.y && my < add_btn.y+add_btn.h) {
-            add_new_class(); return;
+        if (mx >= add_btn.x && mx < add_btn.x + add_btn.w &&
+            my >= add_btn.y && my < add_btn.y + add_btn.h) {
+            add_new_class();
+            return;
         }
     }
 }
