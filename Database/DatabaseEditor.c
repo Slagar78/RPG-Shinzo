@@ -29,6 +29,8 @@ cJSON *classes_json = NULL;
 int classes_count = 0;
 cJSON *curves_json = NULL;
 int curves_count = 0;
+cJSON *start_inventory_json = NULL;
+int start_inventory_count = 0;
 
 char error_msg[256] = "";
 
@@ -134,6 +136,7 @@ void load_all() {
     load_json_file("../data/actors/actors.json", &actors_json, "actors", &actors_count);
     load_json_file("../data/actors/classes.json", &classes_json, "classes", &classes_count);
 	load_json_file("../data/actors/growth_curves.json", &curves_json, "curves", &curves_count);
+	load_json_file("../data/actors/start_inventory.json", &start_inventory_json, "start_inventory", &start_inventory_count);
 }
 
 void reload_spells() {
@@ -260,6 +263,28 @@ int save_spells_to_file() {
     free(json_str);
     cJSON_Delete(root);
     return 1;
+}
+
+int save_start_inventory_to_file(void) {
+    if (!start_inventory_json) return 0;
+    cJSON *root = cJSON_CreateObject();
+    cJSON *dup = cJSON_Duplicate(start_inventory_json, 1);
+    cJSON_AddItemToObject(root, "start_inventory", dup);
+    char *js = cJSON_PrintBuffered(root, 0, 1);
+    FILE *f = fopen("../data/actors/start_inventory.json", "w");
+    if (f) {
+        fputs(js, f);
+        fclose(f);
+        error_msg[0] = '\0';
+        free(js);
+        cJSON_Delete(root);
+        return 1;
+    } else {
+        snprintf(error_msg, sizeof(error_msg), "Failed to save start_inventory.json");
+        free(js);
+        cJSON_Delete(root);
+        return 0;
+    }
 }
 
 // Поля редактирования (добавлено поле Type, порядок: Name, Level, MP, Type, Power, Range Min, Range Max, Radius, Icon)

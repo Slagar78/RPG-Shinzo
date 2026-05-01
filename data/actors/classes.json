@@ -45,7 +45,7 @@
 				}]
 		}, {
 			"id":	1,
-			"name":	"PRST",
+			"name":	"SRST",
 			"full_name":	"Priest",
 			"move":	5,
 			"move_type":	"HEALER",
@@ -80,7 +80,7 @@
 					"spell_level":	1
 				}, {
 					"level":	4,
-					"spell":	"DETOX",
+					"spell":	"Aura",
 					"spell_level":	1
 				}, {
 					"level":	7,

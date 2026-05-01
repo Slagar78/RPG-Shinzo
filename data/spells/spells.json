@@ -50,16 +50,6 @@
 			"power":	15,
 			"icon":	"assets/spells/Aura.png"
 		}, {
-			"id":	6,
-			"name":	"magic00",
-			"level":	1,
-			"mp":	5,
-			"type":	"heal",
-			"range":	[0, 3],
-			"radius":	1,
-			"power":	5,
-			"icon":	"assets/spells/magic_empty.png"
-		}, {
 			"id":	7,
 			"name":	"magic01",
 			"level":	1,
@@ -79,5 +69,15 @@
 			"radius":	12,
 			"power":	53423,
 			"icon":	"assets/spells/icon012.png"
+		}, {
+			"id":	10,
+			"name":	"Aura",
+			"level":	3,
+			"mp":	5,
+			"type":	"heal",
+			"range":	[0, 3],
+			"radius":	1,
+			"power":	5,
+			"icon":	"assets/spells/magic_empty.png"
 		}]
 }

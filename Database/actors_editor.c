@@ -7,46 +7,57 @@
 #include <windows.h>
 #include <commdlg.h>
 
-// Внешние глобальные переменные (из DatabaseEditor.c)
-extern cJSON *classes_json;       // массив классов
+// Внешние данные из DatabaseEditor.c
+extern cJSON *classes_json;
 extern int classes_count;
-extern cJSON *actors_json;        // массив актёров
+extern cJSON *actors_json;
 extern int actors_count;
+extern cJSON *start_inventory_json;
+extern int start_inventory_count;
 extern TTF_Font *g_font;
 extern int g_font_ok;
 extern char error_msg[256];
+
 int draw_text_ext(SDL_Renderer *r, int x, int y, const char *text, SDL_Color color);
 char* open_file_dialog();
 
-// ---------- ЛОКАЛЬНЫЕ ДАННЫЕ МОДУЛЯ ----------
+// ---------- ЛОКАЛЬНЫЕ ДАННЫЕ ----------
 static cJSON *actors = NULL;
 static int actor_count = 0;
 static int selected_actor = -1;
 
-// поля редактирования
-static char  name_buf[11] = {0};       // до 10 символов
+static char  name_buf[11] = {0};
 static int   class_id_val = 0;
 static char  portrait_buf[64] = {0};
 static char  mapsprite_buf[64] = {0};
 static int   level_val = 1;
 
-// вспомогательные списки классов
 typedef struct {
     int id;
     char name[64];
 } ClassEntry;
 static ClassEntry class_list[200];
 static int class_list_count = 0;
-static int selected_class_idx = -1;   // индекс в class_list
+static int selected_class_idx = -1;
 
-// кнопки
 static int save_timer = 0;
 #define SAVE_BLINK_DURATION 42
 static int actor_scroll = 0;
-static int g_window_height = 680;   // высота окна по умолчанию
+static int g_window_height = 680;
+static int last_actor_btns_y = 0;   // <-- ДОБАВЛЕНО: запоминаем Y кнопок
 
-// поля ввода (EditField)
-#define MAX_ACTOR_FIELDS 10
+// Стартовый инвентарь
+static int start_level_val = 1;
+static char start_items[4][64];
+static int start_items_equipped[4];
+static int has_start_data = 0;
+static char item_names[200][64];
+static int item_name_count = 0;
+
+static void build_item_name_list(void);
+
+// поля ввода
+#define MAX_ACTOR_FIELDS 20
 typedef struct {
     char text[256];
     int cursor;
@@ -57,13 +68,13 @@ typedef struct {
     int max_len;
     int array_index;
     SDL_Rect rect;
-    int is_special; // 0-обычное, 1-class, 2-portrait, 3-mapsprite
+    int is_special;
 } ActorField;
 static ActorField actor_fields[MAX_ACTOR_FIELDS];
 static int actor_field_count = 0;
 static int actor_active_field = -1;
 
-// Прототипы локальных функций
+// прототипы
 static void build_class_list(void);
 static void commit_actor_changes(void);
 static void load_actor_fields(void);
@@ -73,9 +84,11 @@ static int  handle_actor_input(SDL_Event *evt, int idx);
 static void draw_actor_field(SDL_Renderer *r, int x, int y, int w, int h, int idx, const char *label, const char *fallback_text);
 static void add_new_actor(void);
 static void delete_actor(void);
+static cJSON* find_start_inventory_entry(int actor_id);
+static void save_start_inventory_for_actor(int actor_id);
+extern int save_start_inventory_to_file(void); // объявлена в DatabaseEditor.c
 
 // ---------- РЕАЛИЗАЦИИ ----------
-
 static void build_class_list(void) {
     class_list_count = 0;
     for (int i = 0; i < classes_count; i++) {
@@ -88,6 +101,72 @@ static void build_class_list(void) {
             class_list[class_list_count].name[63] = '\0';
             class_list_count++;
         }
+    }
+}
+
+static void build_item_name_list(void) {
+    item_name_count = 0;
+    extern cJSON *items_json;
+    extern int items_count;
+    if (!items_json) return;
+    for (int i = 0; i < items_count; i++) {
+        cJSON *it = cJSON_GetArrayItem(items_json, i);
+        const char *name = cJSON_GetObjectItem(it, "name")->valuestring;
+        int exists = 0;
+        for (int j = 0; j < item_name_count; j++)
+            if (strcmp(item_names[j], name) == 0) { exists = 1; break; }
+        if (!exists && item_name_count < 200) {
+            strncpy(item_names[item_name_count], name, 63);
+            item_names[item_name_count][63] = '\0';
+            item_name_count++;
+        }
+    }
+    if (item_name_count < 200) {
+        strcpy(item_names[item_name_count], "NOTHING");
+        item_name_count++;
+    }
+}
+
+static cJSON* find_start_inventory_entry(int actor_id) {
+    for (int i = 0; i < start_inventory_count; i++) {
+        cJSON *entry = cJSON_GetArrayItem(start_inventory_json, i);
+        if (cJSON_GetObjectItem(entry, "actor_id")->valueint == actor_id)
+            return entry;
+    }
+    return NULL;
+}
+
+static void save_start_inventory_for_actor(int actor_id) {
+    cJSON *entry = find_start_inventory_entry(actor_id);
+    if (entry) {
+        cJSON *st_lvl = cJSON_GetObjectItem(entry, "start_level");
+        if (!st_lvl) cJSON_AddNumberToObject(entry, "start_level", start_level_val);
+        else st_lvl->valueint = start_level_val;
+
+        cJSON *items_arr = cJSON_GetObjectItem(entry, "items");
+        if (items_arr) cJSON_DeleteItemFromObject(entry, "items");
+        items_arr = cJSON_CreateArray();
+        for (int i = 0; i < 4; i++) {
+            cJSON *slot = cJSON_CreateObject();
+            cJSON_AddStringToObject(slot, "item", start_items[i]);
+            cJSON_AddNumberToObject(slot, "equipped", start_items_equipped[i] ? 1 : 0);
+            cJSON_AddItemToArray(items_arr, slot);
+        }
+        cJSON_AddItemToObject(entry, "items", items_arr);
+    } else {
+        entry = cJSON_CreateObject();
+        cJSON_AddNumberToObject(entry, "actor_id", actor_id);
+        cJSON_AddNumberToObject(entry, "start_level", start_level_val);
+        cJSON *items_arr = cJSON_CreateArray();
+        for (int i = 0; i < 4; i++) {
+            cJSON *slot = cJSON_CreateObject();
+            cJSON_AddStringToObject(slot, "item", start_items[i]);
+            cJSON_AddNumberToObject(slot, "equipped", start_items_equipped[i] ? 1 : 0);
+            cJSON_AddItemToArray(items_arr, slot);
+        }
+        cJSON_AddItemToObject(entry, "items", items_arr);
+        cJSON_AddItemToArray(start_inventory_json, entry);
+        start_inventory_count++;
     }
 }
 
@@ -104,6 +183,9 @@ static void commit_actor_changes(void) {
     if (ms && cJSON_IsString(ms)) cJSON_SetValuestring(ms, mapsprite_buf);
     cJSON *lv = cJSON_GetObjectItem(act, "level");
     if (lv && cJSON_IsNumber(lv)) { lv->valueint = level_val; lv->valuedouble = level_val; }
+
+    int actor_id = cJSON_GetObjectItem(act, "id")->valueint;
+    save_start_inventory_for_actor(actor_id);
 }
 
 static void load_actor_fields(void) {
@@ -118,10 +200,48 @@ static void load_actor_fields(void) {
     strncpy(mapsprite_buf, m ? m : "", 63); mapsprite_buf[63] = '\0';
     level_val = cJSON_GetObjectItem(act, "level")->valueint;
 
-    // синхронизация индекса класса
     selected_class_idx = -1;
     for (int i = 0; i < class_list_count; i++) {
         if (class_list[i].id == class_id_val) { selected_class_idx = i; break; }
+    }
+
+    // загрузка стартового инвентаря из start_inventory.json
+    int actor_id = cJSON_GetObjectItem(act, "id")->valueint;
+    cJSON *entry = find_start_inventory_entry(actor_id);
+    has_start_data = (entry != NULL);
+    if (has_start_data) {
+        cJSON *st_lvl = cJSON_GetObjectItem(entry, "start_level");
+        start_level_val = (st_lvl && cJSON_IsNumber(st_lvl)) ? st_lvl->valueint : 1;
+        if (start_level_val < 1) start_level_val = 1;
+
+        cJSON *items_arr = cJSON_GetObjectItem(entry, "items");
+        if (items_arr && cJSON_IsArray(items_arr)) {
+            int sz = cJSON_GetArraySize(items_arr);
+            if (sz > 4) sz = 4;
+            for (int i = 0; i < sz; i++) {
+                cJSON *slot = cJSON_GetArrayItem(items_arr, i);
+                const char *item_name = cJSON_GetObjectItem(slot, "item")->valuestring;
+                strncpy(start_items[i], item_name ? item_name : "NOTHING", 63);
+                start_items[i][63] = '\0';
+                cJSON *eq = cJSON_GetObjectItem(slot, "equipped");
+                start_items_equipped[i] = (eq && eq->valueint != 0) ? 1 : 0;
+            }
+            for (int i = sz; i < 4; i++) {
+                strcpy(start_items[i], "NOTHING");
+                start_items_equipped[i] = 0;
+            }
+        } else {
+            for (int i = 0; i < 4; i++) {
+                strcpy(start_items[i], "NOTHING");
+                start_items_equipped[i] = 0;
+            }
+        }
+    } else {
+        start_level_val = 1;
+        for (int i = 0; i < 4; i++) {
+            strcpy(start_items[i], "NOTHING");
+            start_items_equipped[i] = 0;
+        }
     }
     open_actor_fields();
 }
@@ -131,7 +251,6 @@ static void open_actor_fields(void) {
     actor_active_field = -1;
     int base_x = 360, base_y = 80, off = 100;
 
-    // 0 Name
     snprintf(actor_fields[0].text, sizeof(actor_fields[0].text), "%s", name_buf);
     actor_fields[0].cursor = strlen(actor_fields[0].text);
     actor_fields[0].active = 0;
@@ -140,7 +259,6 @@ static void open_actor_fields(void) {
     actor_fields[0].is_numeric = 0; actor_fields[0].max_len = 10; actor_fields[0].array_index = -1; actor_fields[0].is_special = 0;
     actor_fields[0].rect = (SDL_Rect){base_x+off, base_y + 0*35, 150, 22};
 
-    // 1 Class (специальное)
     snprintf(actor_fields[1].text, sizeof(actor_fields[1].text), "%d", class_id_val);
     actor_fields[1].cursor = 0;
     actor_fields[1].active = 0;
@@ -149,7 +267,6 @@ static void open_actor_fields(void) {
     actor_fields[1].is_special = 1;
     actor_fields[1].rect = (SDL_Rect){base_x+off, base_y + 1*35, 150, 22};
 
-    // 2 Level
     snprintf(actor_fields[2].text, sizeof(actor_fields[2].text), "%d", level_val);
     actor_fields[2].cursor = strlen(actor_fields[2].text);
     actor_fields[2].active = 0;
@@ -157,7 +274,6 @@ static void open_actor_fields(void) {
     actor_fields[2].is_numeric = 1; actor_fields[2].max_len = 4; actor_fields[2].array_index = -1; actor_fields[2].is_special = 0;
     actor_fields[2].rect = (SDL_Rect){base_x+off, base_y + 2*35, 150, 22};
 
-    // 3 Portrait (специальное)
     snprintf(actor_fields[3].text, sizeof(actor_fields[3].text), "%s", portrait_buf);
     actor_fields[3].cursor = strlen(actor_fields[3].text);
     actor_fields[3].active = 0;
@@ -166,7 +282,6 @@ static void open_actor_fields(void) {
     actor_fields[3].is_special = 2;
     actor_fields[3].rect = (SDL_Rect){base_x+off, base_y + 3*35, 150, 22};
 
-    // 4 Mapsprite (специальное)
     snprintf(actor_fields[4].text, sizeof(actor_fields[4].text), "%s", mapsprite_buf);
     actor_fields[4].cursor = strlen(actor_fields[4].text);
     actor_fields[4].active = 0;
@@ -175,20 +290,31 @@ static void open_actor_fields(void) {
     actor_fields[4].is_special = 3;
     actor_fields[4].rect = (SDL_Rect){base_x+off, base_y + 4*35, 150, 22};
 
-    actor_field_count = 5;
+    snprintf(actor_fields[5].text, sizeof(actor_fields[5].text), "%d", start_level_val);
+    actor_fields[5].cursor = strlen(actor_fields[5].text);
+    actor_fields[5].active = 0;
+    actor_fields[5].json_obj = NULL;
+    actor_fields[5].json_key = "start_level";
+    actor_fields[5].is_numeric = 1;
+    actor_fields[5].max_len = 3;
+    actor_fields[5].array_index = -1;
+    actor_fields[5].is_special = 0;
+    actor_fields[5].rect = (SDL_Rect){base_x+off, base_y + 5*35, 150, 22};
+
+    actor_field_count = 6;
 }
 
 static void commit_actor_field(int idx) {
     if (idx < 0 || idx >= actor_field_count) return;
     ActorField *f = &actor_fields[idx];
-    if (f->is_special == 1) { // class
+    if (f->is_special == 1) {
         class_id_val = atoi(f->text);
         selected_class_idx = -1;
         for (int i = 0; i < class_list_count; i++)
             if (class_list[i].id == class_id_val) { selected_class_idx = i; break; }
-    } else if (f->is_special == 2) { // portrait
+    } else if (f->is_special == 2) {
         strncpy(portrait_buf, f->text, 63); portrait_buf[63] = '\0';
-    } else if (f->is_special == 3) { // mapsprite
+    } else if (f->is_special == 3) {
         strncpy(mapsprite_buf, f->text, 63); mapsprite_buf[63] = '\0';
     } else {
         if (f->json_obj && f->json_key) {
@@ -223,7 +349,7 @@ static int handle_actor_input(SDL_Event *evt, int idx) {
             commit_actor_field(idx);
             int best = -1, bestDist = 1000;
             for (int i = 0; i < actor_field_count; i++) {
-                if (i == 3 || i == 4) continue; // пропускаем портрет и спрайт
+                if (i == 3 || i == 4) continue;
                 SDL_Rect fr = actor_fields[i].rect;
                 int cy = fr.y + fr.h/2;
                 int dist = abs(my - cy);
@@ -262,7 +388,7 @@ static int handle_actor_input(SDL_Event *evt, int idx) {
             actor_active_field = new_idx;
             return 1;
         } else if (evt->key.keysym.sym == SDLK_DOWN) {
-            if (idx >= 2) return 1; // останавливаемся на Level (индекс 2)
+            if (idx >= 2) return 1;
             commit_actor_field(idx);
             int new_idx = idx + 1;
             actor_fields[new_idx].active = 1;
@@ -335,7 +461,6 @@ static void browse_asset(char *buffer, int buf_size) {
     if (!path) return;
     const char *fname = strrchr(path, '\\');
     if (!fname) fname = path; else fname++;
-    // удаляем расширение .png
     char tmp[128];
     strncpy(tmp, fname, 127); tmp[127] = '\0';
     char *dot = strrchr(tmp, '.');
@@ -416,6 +541,7 @@ void actors_reload(void) {
             actor_scroll = 0;
             save_timer = 0;
             build_class_list();
+            build_item_name_list();
             actor_field_count = 0;
             actor_active_field = -1;
             if (actor_count > 0) { selected_actor = 0; load_actor_fields(); }
@@ -431,6 +557,7 @@ void actors_init(cJSON *json_array, int count) {
     actor_scroll = 0;
     save_timer = 0;
     build_class_list();
+    build_item_name_list();
     actor_field_count = 0;
     actor_active_field = -1;
     if (actor_count > 0) { selected_actor = 0; load_actor_fields(); }
@@ -450,10 +577,7 @@ void actors_save_to_file(void) {
 }
 
 int actors_is_edit_active(void) { return actor_active_field >= 0; }
-
-void actors_update_timer(void) {
-    if (save_timer > 0) save_timer--;
-}
+void actors_update_timer(void) { if (save_timer > 0) save_timer--; }
 
 void actors_reset_selection(void) {
     if (actor_count > 0) { selected_actor = 0; load_actor_fields(); }
@@ -462,11 +586,9 @@ void actors_reset_selection(void) {
 
 void actors_adjust_scroll(int delta) {
     actor_scroll -= delta;
-    // Не выше первого элемента
     if (actor_scroll < 0) actor_scroll = 0;
-    // Не ниже последнего элемента
     int total_h = actors_get_total_height();
-    int visible_h = g_window_height - 35; // 35 = tab_h + 5 (высота вкладок и отступ)
+    int visible_h = g_window_height - 35;
     int max_scroll = total_h > visible_h ? total_h - visible_h : 0;
     if (actor_scroll > max_scroll) actor_scroll = max_scroll;
 }
@@ -482,7 +604,6 @@ void actors_draw_list(SDL_Renderer *renderer, int y_offset, int scroll) {
         int id = cJSON_GetObjectItem(act, "id")->valueint;
         const char *name = cJSON_GetObjectItem(act, "name")->valuestring;
         int cid = cJSON_GetObjectItem(act, "class_id")->valueint;
-        // Найдём название класса
         const char *cname = "???";
         for (int k = 0; k < class_list_count; k++) {
             if (class_list[k].id == cid) { cname = class_list[k].name; break; }
@@ -516,28 +637,25 @@ void actors_handle_click(int mx, int my, int y_offset, int scroll) {
 void actors_draw_edit_panel(SDL_Renderer *renderer, int px, int py) {
     if (selected_actor < 0) return;
     SDL_Color black = {0,0,0,255}, white = {255,255,255}, blue = {70,70,120};
-    SDL_Rect panel = {px, py, 580, 500};
+    SDL_Color green = {0,200,0}, red = {200,0,0};
+    SDL_Rect panel = {px, py, 580, 650};
     SDL_SetRenderDrawColor(renderer, 60,60,60,255); SDL_RenderFillRect(renderer, &panel);
     SDL_SetRenderDrawColor(renderer, 255,255,255,255); SDL_RenderDrawRect(renderer, &panel);
 
     int y = py + 10;
-    // Name
-    draw_actor_field(renderer, px+10, y, 150, 22, 0, "Name:", name_buf);
-    // покажем id актёра рядом
     cJSON *act = cJSON_GetArrayItem(actors, selected_actor);
     int actor_id = cJSON_GetObjectItem(act, "id")->valueint;
     char idstr[16]; snprintf(idstr, sizeof(idstr), "ID:%d", actor_id);
+
+    draw_actor_field(renderer, px+10, y, 150, 22, 0, "Name:", name_buf);
     draw_text_ext(renderer, px+270, y+3, idstr, white);
     y += 35;
 
-    // Class (с кнопками < >)
     draw_text_ext(renderer, px+10, y+3, "Class:", white);
     const char *cname = "???";
-    int cid_disp = class_id_val;
-    for (int i = 0; i < class_list_count; i++) {
+    for (int i = 0; i < class_list_count; i++)
         if (class_list[i].id == class_id_val) { cname = class_list[i].name; break; }
-    }
-    char class_label[128]; snprintf(class_label, sizeof(class_label), "%d: %s", cid_disp, cname);
+    char class_label[128]; snprintf(class_label, sizeof(class_label), "%d: %s", class_id_val, cname);
     draw_text_ext(renderer, px+110, y+3, class_label, white);
     SDL_Rect prev_c = {px+270, y, 20, 22}; SDL_SetRenderDrawColor(renderer, blue.r, blue.g, blue.b, 255); SDL_RenderFillRect(renderer, &prev_c);
     SDL_SetRenderDrawColor(renderer, white.r, white.g, white.b, 255); SDL_RenderDrawRect(renderer, &prev_c);
@@ -547,12 +665,10 @@ void actors_draw_edit_panel(SDL_Renderer *renderer, int px, int py) {
     draw_text_ext(renderer, px+300, y+3, ">", white);
     y += 35;
 
-    // Level
     char lvlstr[8]; snprintf(lvlstr, sizeof(lvlstr), "%d", level_val);
     draw_actor_field(renderer, px+10, y, 150, 22, 2, "Level:", lvlstr);
     y += 35;
 
-    // Portrait
     draw_text_ext(renderer, px+10, y+3, "Portrait:", white);
     draw_text_ext(renderer, px+110, y+3, portrait_buf, white);
     SDL_Rect brow1 = {px+10+100+150+5, y, 70, 22};
@@ -561,34 +677,72 @@ void actors_draw_edit_panel(SDL_Renderer *renderer, int px, int py) {
     draw_text_ext(renderer, brow1.x+5, brow1.y+3, "Browse", white);
     y += 35;
 
-    // Mapsprite
     draw_text_ext(renderer, px+10, y+3, "Mapsprite:", white);
     draw_text_ext(renderer, px+110, y+3, mapsprite_buf, white);
     SDL_Rect brow2 = {px+10+100+150+5, y, 70, 22};
     SDL_SetRenderDrawColor(renderer, 100,100,200,255); SDL_RenderFillRect(renderer, &brow2);
     SDL_SetRenderDrawColor(renderer, white.r, white.g, white.b, 255); SDL_RenderDrawRect(renderer, &brow2);
     draw_text_ext(renderer, brow2.x+5, brow2.y+3, "Browse", white);
-    y += 40;
+    y += 35;
 
-    // Кнопки: Del Actor | SAVE | Refresh | Add Actor
-    int btn_y = y + 5;
-    SDL_Rect del_btn = {px+10, btn_y, 85, 30};
+    if (has_start_data) {
+        draw_text_ext(renderer, px+10, y, "Start Inventory", white);
+        y += 25;
+
+        draw_text_ext(renderer, px+10, y+3, "Start Class:", white);
+        draw_text_ext(renderer, px+110, y+3, cname, white);
+        y += 25;
+
+        char start_lvl_str[8]; snprintf(start_lvl_str, sizeof(start_lvl_str), "%d", start_level_val);
+        draw_actor_field(renderer, px+10, y, 150, 22, 5, "Start Level:", start_lvl_str);
+        y += 35;
+
+        for (int i = 0; i < 4; i++) {
+            draw_text_ext(renderer, px+10, y+3, start_items[i], white);
+            SDL_Rect prev_item = {px+220, y, 20, 22};
+            SDL_SetRenderDrawColor(renderer, blue.r, blue.g, blue.b, 255); SDL_RenderFillRect(renderer, &prev_item);
+            SDL_SetRenderDrawColor(renderer, white.r, white.g, white.b, 255); SDL_RenderDrawRect(renderer, &prev_item);
+            draw_text_ext(renderer, prev_item.x+5, prev_item.y+3, "<", white);
+            SDL_Rect next_item = {px+245, y, 20, 22};
+            SDL_SetRenderDrawColor(renderer, blue.r, blue.g, blue.b, 255); SDL_RenderFillRect(renderer, &next_item);
+            SDL_SetRenderDrawColor(renderer, white.r, white.g, white.b, 255); SDL_RenderDrawRect(renderer, &next_item);
+            draw_text_ext(renderer, next_item.x+5, next_item.y+3, ">", white);
+            SDL_Rect nothing_btn = {px+275, y, 70, 22};
+            SDL_SetRenderDrawColor(renderer, 180,180,180,255); SDL_RenderFillRect(renderer, &nothing_btn);
+            SDL_SetRenderDrawColor(renderer, white.r, white.g, white.b, 255); SDL_RenderDrawRect(renderer, &nothing_btn);
+            draw_text_ext(renderer, nothing_btn.x+5, nothing_btn.y+3, "NOTHING", black);
+            SDL_Rect eq_rect = {px+355, y, 22, 22};
+            SDL_SetRenderDrawColor(renderer, white.r, white.g, white.b, 255); SDL_RenderFillRect(renderer, &eq_rect);
+            SDL_SetRenderDrawColor(renderer, 0,0,0,255); SDL_RenderDrawRect(renderer, &eq_rect);
+            if (start_items_equipped[i])
+                draw_text_ext(renderer, eq_rect.x+3, eq_rect.y+2, "✔", green);
+            else
+                draw_text_ext(renderer, eq_rect.x+3, eq_rect.y+2, "✘", red);
+            y += 30;
+        }
+        y += 5;
+    }
+
+    // Сохраняем Y кнопок для обработчика кликов
+    last_actor_btns_y = y;
+
+    SDL_Rect del_btn = {px+10, y, 85, 30};
     SDL_SetRenderDrawColor(renderer, 200,80,80,255); SDL_RenderFillRect(renderer, &del_btn);
     SDL_SetRenderDrawColor(renderer, 255,255,255,255); SDL_RenderDrawRect(renderer, &del_btn);
     draw_text_ext(renderer, del_btn.x+10, del_btn.y+5, "Del Actor", white);
 
-    SDL_Rect save_btn = {px+100, btn_y, 70, 30};
+    SDL_Rect save_btn = {px+100, y, 70, 30};
     SDL_Color save_col = (save_timer > 0) ? (SDL_Color){0,255,0,255} : (SDL_Color){255,255,0,255};
     SDL_SetRenderDrawColor(renderer, save_col.r, save_col.g, save_col.b, 255); SDL_RenderFillRect(renderer, &save_btn);
     SDL_SetRenderDrawColor(renderer, 0,0,0,255); SDL_RenderDrawRect(renderer, &save_btn);
     draw_text_ext(renderer, save_btn.x+12, save_btn.y+5, "SAVE", black);
 
-    SDL_Rect refresh_btn = {px+175, btn_y, 80, 30};
+    SDL_Rect refresh_btn = {px+175, y, 80, 30};
     SDL_SetRenderDrawColor(renderer, 180,180,255,255); SDL_RenderFillRect(renderer, &refresh_btn);
     SDL_SetRenderDrawColor(renderer, 0,0,0,255); SDL_RenderDrawRect(renderer, &refresh_btn);
     draw_text_ext(renderer, refresh_btn.x+12, refresh_btn.y+5, "Refresh", black);
 
-    SDL_Rect add_btn = {px+260, btn_y, 95, 30};
+    SDL_Rect add_btn = {px+260, y, 95, 30};
     SDL_SetRenderDrawColor(renderer, 100,200,100,255); SDL_RenderFillRect(renderer, &add_btn);
     SDL_SetRenderDrawColor(renderer, 255,255,255,255); SDL_RenderDrawRect(renderer, &add_btn);
     draw_text_ext(renderer, add_btn.x+5, add_btn.y+5, "Add Actor", white);
@@ -620,17 +774,70 @@ void actors_handle_input(SDL_Event *evt) {
             commit_actor_changes();
             return;
         }
+
+        // Стартовый инвентарь
+        if (has_start_data) {
+            int start_y = py + 10 + 5*35 + 25 + 25 + 35;
+            for (int slot = 0; slot < 4; slot++) {
+                int y_slot = start_y + slot * 30;
+                SDL_Rect prev_item = {px+220, y_slot, 20, 22};
+                if (mx >= prev_item.x && mx < prev_item.x+prev_item.w && my >= prev_item.y && my < prev_item.y+prev_item.h) {
+                    int cur_idx = -1;
+                    for (int k = 0; k < item_name_count; k++) {
+                        if (strcmp(item_names[k], start_items[slot]) == 0) { cur_idx = k; break; }
+                    }
+                    if (cur_idx == -1) cur_idx = 0;
+                    int new_idx = cur_idx - 1;
+                    if (new_idx < 0) new_idx = item_name_count - 1;
+                    strncpy(start_items[slot], item_names[new_idx], 63);
+                    start_items[slot][63] = '\0';
+                    commit_actor_changes();
+                    return;
+                }
+                SDL_Rect next_item = {px+245, y_slot, 20, 22};
+                if (mx >= next_item.x && mx < next_item.x+next_item.w && my >= next_item.y && my < next_item.y+next_item.h) {
+                    int cur_idx = -1;
+                    for (int k = 0; k < item_name_count; k++) {
+                        if (strcmp(item_names[k], start_items[slot]) == 0) { cur_idx = k; break; }
+                    }
+                    if (cur_idx == -1) cur_idx = 0;
+                    int new_idx = cur_idx + 1;
+                    if (new_idx >= item_name_count) new_idx = 0;
+                    strncpy(start_items[slot], item_names[new_idx], 63);
+                    start_items[slot][63] = '\0';
+                    commit_actor_changes();
+                    return;
+                }
+                SDL_Rect nothing_btn = {px+275, y_slot, 70, 22};
+                if (mx >= nothing_btn.x && mx < nothing_btn.x+nothing_btn.w && my >= nothing_btn.y && my < nothing_btn.y+nothing_btn.h) {
+                    strcpy(start_items[slot], "NOTHING");
+                    commit_actor_changes();
+                    return;
+                }
+                SDL_Rect eq_rect = {px+355, y_slot, 22, 22};
+                if (mx >= eq_rect.x && mx < eq_rect.x+eq_rect.w && my >= eq_rect.y && my < eq_rect.y+eq_rect.h) {
+                    start_items_equipped[slot] = !start_items_equipped[slot];
+                    commit_actor_changes();
+                    return;
+                }
+            }
+        }
+
         // Кнопки нижнего ряда
-        int btn_y = py + 10 + 5*35 + 5;
+        int btn_y = last_actor_btns_y;
         SDL_Rect del_btn = {px+10, btn_y, 85, 30};
         SDL_Rect save_btn = {px+100, btn_y, 70, 30};
         SDL_Rect refresh_btn = {px+175, btn_y, 80, 30};
         SDL_Rect add_btn = {px+260, btn_y, 95, 30};
+
         if (mx >= del_btn.x && mx < del_btn.x+del_btn.w && my >= del_btn.y && my < del_btn.y+del_btn.h) {
             delete_actor(); return;
         }
         if (mx >= save_btn.x && mx < save_btn.x+save_btn.w && my >= save_btn.y && my < save_btn.y+save_btn.h) {
-            actors_save_to_file(); return;
+            commit_actor_changes();
+            actors_save_to_file();
+            save_start_inventory_to_file();
+            return;
         }
         if (mx >= refresh_btn.x && mx < refresh_btn.x+refresh_btn.w && my >= refresh_btn.y && my < refresh_btn.y+refresh_btn.h) {
             actors_reload(); return;
@@ -638,6 +845,7 @@ void actors_handle_input(SDL_Event *evt) {
         if (mx >= add_btn.x && mx < add_btn.x+add_btn.w && my >= add_btn.y && my < add_btn.y+add_btn.h) {
             add_new_actor(); return;
         }
+
         // Кнопки Class (< >)
         SDL_Rect prev_c = {px+270, py+10 + 1*35, 20, 22};
         SDL_Rect next_c = {px+295, py+10 + 1*35, 20, 22};
