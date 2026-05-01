@@ -111,6 +111,7 @@ typedef struct {
     Uint32 dialog_cursor_blink;
 
     bool save_blink_active;
+	char music_fullpath[256];   // хранит полный относительный путь к музыке
 	bool dialog_just_closed;   // запрещает рисование сразу после закрытия диалога
     Uint32 save_blink_time;
 } Editor;
@@ -140,6 +141,7 @@ void editor_init(Editor *ed) {
     ed->cam_x = ed->cam_y = 0;
     ed->panning = 0;
     ed->save_blink_active = false;
+	ed->music_fullpath[0] = '\0';
 	ed->dialog_just_closed = false;
     ed->save_blink_time = 0;
     ed->dialog_active_field = 0;
@@ -939,7 +941,22 @@ void render_toolbar(Editor *ed) {
     char layer_label[2] = { '0' + ed->current_layer + 1, '\0' };
     draw_text_centered(ed->renderer, ed->font, layer_label,
                        layer_btn.x + btn_w/2, layer_btn.y + btn_h/2, (SDL_Color){255,255,255,255});
-}
+    // Подсказка "Active Layer" справа от кнопки (без стрелки)
+    {
+        SDL_Color hint_color = {200, 200, 200, 255};  // светло-серый
+        int hint_x = active_btn_x + btn_w + 12;        // отступ от правого края кнопки
+        int hint_y = layer_btn.y + (layer_btn.h - FONT_SIZE) / 2; // по вертикали как на кнопке
+
+        SDL_Surface* text_surf = TTF_RenderUTF8_Blended(ed->font, "Active Layer", hint_color);
+        if (text_surf) {
+            SDL_Texture* text_tex = SDL_CreateTextureFromSurface(ed->renderer, text_surf);
+            SDL_Rect text_dst = { hint_x, hint_y, text_surf->w, text_surf->h };
+            SDL_RenderCopy(ed->renderer, text_tex, NULL, &text_dst);
+            SDL_FreeSurface(text_surf);
+            SDL_DestroyTexture(text_tex);
+        }
+    }
+}	
 // Карта
 void render_map(Editor *ed) {
     Map *map = current_map(ed);
@@ -988,30 +1005,40 @@ void render_map(Editor *ed) {
     }
 	
     // Второй слой
-    if (ed->show_layer2) {
-        for (int x = start_x; x < end_x; x++) {
-            for (int y = start_y; y < end_y; y++) {
-                int idx = x * map->height + y;
-                int tile_id = map->tiles2[idx];
-                if (tile_id < 0 || tile_id >= ed->tile_count) continue;
+if (ed->show_layer2) {
+    for (int x = start_x; x < end_x; x++) {
+        for (int y = start_y; y < end_y; y++) {
+            int idx = x * map->height + y;
+            int tile_id = map->tiles2[idx];
+            if (tile_id < 0 || tile_id >= ed->tile_count) continue;
 
-                SDL_Texture *tex = ed->tiles[tile_id];
-                double angle = map->rot2[idx] * 90.0;
-                SDL_RendererFlip flip = SDL_FLIP_NONE;
-                if (map->mirror_x2[idx]) flip |= SDL_FLIP_HORIZONTAL;
-                if (map->mirror_y2[idx]) flip |= SDL_FLIP_VERTICAL;
+            SDL_Texture *tex = ed->tiles[tile_id];
+            double angle = map->rot2[idx] * 90.0;
+            SDL_RendererFlip flip = SDL_FLIP_NONE;
+            if (map->mirror_x2[idx]) flip |= SDL_FLIP_HORIZONTAL;
+            if (map->mirror_y2[idx]) flip |= SDL_FLIP_VERTICAL;
 
-                SDL_FRect dst = {
-                    MAP_X + (x * TILE_SIZE - ed->cam_x) * zoom,
-                    MAP_Y + (y * TILE_SIZE - ed->cam_y) * zoom,
-                    scaled_tile,
-                    scaled_tile
-                };
-                SDL_FPoint center = { scaled_tile / 2.0f, scaled_tile / 2.0f };
-                SDL_RenderCopyExF(ed->renderer, tex, NULL, &dst, angle, &center, flip);
+            SDL_FRect dst = {
+                MAP_X + (x * TILE_SIZE - ed->cam_x) * zoom,
+                MAP_Y + (y * TILE_SIZE - ed->cam_y) * zoom,
+                scaled_tile,
+                scaled_tile
+            };
+            SDL_FPoint center = { scaled_tile / 2.0f, scaled_tile / 2.0f };
+
+            // Полупрозрачность, только если первый слой тоже видим
+            if (ed->show_layer1) {
+                SDL_SetTextureBlendMode(tex, SDL_BLENDMODE_BLEND);   // включаем смешивание
+                SDL_SetTextureAlphaMod(tex, 96);                     // % прозрачности
+            }
+            SDL_RenderCopyExF(ed->renderer, tex, NULL, &dst, angle, &center, flip);
+            if (ed->show_layer1) {
+                SDL_SetTextureAlphaMod(tex, 255);                     // возвращаем полную непрозрачность
+                SDL_SetTextureBlendMode(tex, SDL_BLENDMODE_NONE);     // отключаем смешивание
             }
         }
     }
+}
 
     // Подсветка тайла под мышью (рисуем целочисленный прямоугольник)
     int mx, my;
@@ -1084,16 +1111,34 @@ void open_dialog(Editor *ed, int type) {
 
     switch (type) {
         case DIALOG_MUSIC_MAP: {
-            Map *cur = current_map(ed);
-            if (cur) {
-                snprintf(ed->input_text, sizeof(ed->input_text), "%.63s", cur->music_file);
-                snprintf(ed->input_text2, sizeof(ed->input_text2), "%.2f", cur->music_volume);
-            } else {
-                ed->input_text[0] = '\0';
-                strcpy(ed->input_text2, "0.80");
-            }
-            break;
+    Map *cur = current_map(ed);
+    if (cur) {
+        // Сохраняем полный путь в music_fullpath
+        safe_strcpy(ed->music_fullpath, sizeof(ed->music_fullpath), cur->music_file);
+        // Извлекаем имя файла для отображения
+        const char *full = ed->music_fullpath;
+        const char *name = strrchr(full, '/');
+        if (!name) name = strrchr(full, '\\');
+        if (name) name++; else name = full;
+        // Обрезаем до 12 символов с троеточием
+        char display_name[64];
+        size_t len = strlen(name);
+        if (len > 12) {
+            memcpy(display_name, name, 12);
+            memcpy(display_name + 12, "...", 3);
+            display_name[15] = '\0';
+        } else {
+            strcpy(display_name, name);
         }
+        snprintf(ed->input_text, sizeof(ed->input_text), "%s", display_name);
+        snprintf(ed->input_text2, sizeof(ed->input_text2), "%.2f", cur->music_volume);
+    } else {
+        ed->music_fullpath[0] = '\0';
+        ed->input_text[0] = '\0';
+        strcpy(ed->input_text2, "0.80");
+    }
+    break;
+}
         default: break;
     }
 }
@@ -1194,17 +1239,33 @@ void handle_dialog_click(Editor *ed, int mx, int my) {
     SDL_Rect cancel = { dlg.x + 200, dlg.y + 180, 110, 28 };
 
     if (ed->dialog_type == DIALOG_MUSIC_MAP) {
-        SDL_Rect browse_btn = { dlg.x + 280, dlg.y + 18, 65, 24 };
-        if (mx >= browse_btn.x && mx < browse_btn.x+browse_btn.w &&
-            my >= browse_btn.y && my < browse_btn.y+browse_btn.h) {
-            char path[256];
-            if (open_file_dialog(path, sizeof(path))) {
-                snprintf(ed->input_text, sizeof(ed->input_text), "%.63s", path);
-                ed->dialog_active_field = 0;
+    SDL_Rect browse_btn = { dlg.x + 280, dlg.y + 18, 65, 24 };
+    if (mx >= browse_btn.x && mx < browse_btn.x+browse_btn.w &&
+        my >= browse_btn.y && my < browse_btn.y+browse_btn.h)
+    {
+        char path[256];
+        if (open_file_dialog(path, sizeof(path))) {
+            // Сохраняем полный относительный путь
+            char rel_music[256];
+            get_relative_path(path, rel_music, sizeof(rel_music));
+            safe_strcpy(ed->music_fullpath, sizeof(ed->music_fullpath), rel_music);
+            // Извлекаем имя файла и обрезаем до 12 символов с троеточием
+            const char *bname = strrchr(rel_music, '/');
+            if (!bname) bname = strrchr(rel_music, '\\');
+            if (bname) bname++; else bname = rel_music;
+            size_t blen = strlen(bname);
+            if (blen > 12) {
+                memcpy(ed->input_text, bname, 12);
+                memcpy(ed->input_text + 12, "...", 3);
+                ed->input_text[15] = '\0';
+            } else {
+                snprintf(ed->input_text, sizeof(ed->input_text), "%s", bname);
             }
-            return;
+            ed->dialog_active_field = 0;
         }
+        return;
     }
+}
 
     if (mx >= ok.x && mx < ok.x+ok.w && my >= ok.y && my < ok.y+ok.h) {
         switch (ed->dialog_type) {
@@ -1228,20 +1289,20 @@ void handle_dialog_click(Editor *ed, int mx, int my) {
                 resize_current_map(ed, w, h);
                 break;
             }
-            case DIALOG_MUSIC_MAP: {
-                Map *cur = current_map(ed);
-                if (cur) {
-                    char rel_music[256];
-                    get_relative_path(ed->input_text, rel_music, sizeof(rel_music));
-                    safe_strcpy(cur->music_file, sizeof(cur->music_file), rel_music);
-                    cur->music_volume = (float)atof(ed->input_text2);
-                    char path[512];
-                    snprintf(path, sizeof(path), "../data/maps/%s.json", cur->name);
-                    map_save_to_json(cur, path);
-                }
-                break;
-            }
-        }
+			
+    case DIALOG_MUSIC_MAP: {
+    Map *cur = current_map(ed);
+    if (cur) {
+        // Сохраняем полный путь из music_fullpath (он уже правильный)
+        safe_strcpy(cur->music_file, sizeof(cur->music_file), ed->music_fullpath);
+        cur->music_volume = (float)atof(ed->input_text2);
+        char path[128];
+        snprintf(path, sizeof(path), "../data/maps/%s.json", cur->name);
+        map_save_to_json(cur, path);
+    }
+    break;
+    }
+}
         close_dialog(ed);
     } else if (mx >= cancel.x && mx < cancel.x+cancel.w && my >= cancel.y && my < cancel.y+cancel.h) {
         close_dialog(ed);
@@ -1276,20 +1337,24 @@ void handle_input(Editor *ed, bool *running) {
                             ed->dialog_active_field = !ed->dialog_active_field;
                         break;
                     case SDLK_BACKSPACE: {
-                        char *str = (ed->dialog_active_field == 0) ? ed->input_text : ed->input_text2;
-                        if (str && strlen(str) > 0)
-                            str[strlen(str)-1] = '\0';
-                        break;
+                    // Запрещаем стирать имя музыки вручную
+                    if (ed->dialog_type == DIALOG_MUSIC_MAP && ed->dialog_active_field == 0) break;
+                    char *str = (ed->dialog_active_field == 0) ? ed->input_text : ed->input_text2;
+                    if (str && strlen(str) > 0)
+                        str[strlen(str)-1] = '\0';
+                    break;
                     }
                 }
             }
-            else if (e.type == SDL_TEXTINPUT) {
-                char *dest = (ed->dialog_active_field == 0) ? ed->input_text : ed->input_text2;
-                int max_len = (ed->dialog_active_field == 1) ? 15 : 63;
-                if (dest && strlen(dest) < max_len) {
-                    strcat(dest, e.text.text);
-                }
-            }
+    else if (e.type == SDL_TEXTINPUT) {
+    // Запрещаем ввод в поле имени музыки
+    if (ed->dialog_type == DIALOG_MUSIC_MAP && ed->dialog_active_field == 0) break;
+    char *dest = (ed->dialog_active_field == 0) ? ed->input_text : ed->input_text2;
+    int max_len = (ed->dialog_active_field == 1) ? 15 : 63;
+    if (dest && strlen(dest) < max_len) {
+        strcat(dest, e.text.text);
+    }
+}
             else if (e.type == SDL_MOUSEBUTTONDOWN && e.button.button == SDL_BUTTON_LEFT) {
                 SDL_Rect dlg = { WINDOW_W/2 - 180, WINDOW_H/2 - 110, 360, 220 };
                 if (ed->dialog_type == DIALOG_NEW_MAP ||
