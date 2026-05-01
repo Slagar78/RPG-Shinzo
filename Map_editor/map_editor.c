@@ -38,6 +38,7 @@
 #define RIGHT_ROTATE   1
 #define RIGHT_FLIP_H   2
 #define RIGHT_FLIP_V   3
+#define RIGHT_DELETE   4
 
 #define DIALOG_NONE          0
 #define DIALOG_NEW_MAP       1
@@ -101,7 +102,7 @@ typedef struct {
     int current_layer;
     bool show_layer1;
     bool show_layer2;
-    SDL_Texture *transform_icons[3];
+    SDL_Texture *transform_icons[4];
 
     bool dialog_active;
     int  dialog_type;
@@ -147,7 +148,7 @@ void editor_init(Editor *ed) {
     ed->dialog_active_field = 0;
     ed->dialog_cursor_blink = 0;
     for (int i = 0; i < 4; i++) ed->type_icons[i] = NULL;
-    for (int i = 0; i < 3; i++) ed->transform_icons[i] = NULL;
+    for (int i = 0; i < 4; i++) ed->transform_icons[i] = NULL;
     ed->map_list.maps = NULL;
     ed->map_list.map_count = 0;
     ed->map_list.current_map = 0;
@@ -210,15 +211,16 @@ void load_type_icons(Editor *ed) {
 }
 
 void load_transform_icons(Editor *ed) {
-    const char *files[3] = {
+    const char *files[4] = {
         "../assets/icons/rotate.png",
         "../assets/icons/flip_h.png",
-        "../assets/icons/flip_v.png"
+        "../assets/icons/flip_v.png",
+        "../assets/icons/Delete_Tile.png"
     };
-    Uint8 fr[3] = {200, 100, 100};
-    Uint8 fg[3] = {100, 200, 100};
-    Uint8 fb[3] = {100, 100, 200};
-    for (int i = 0; i < 3; i++) {
+    Uint8 fr[4] = {200, 100, 100, 200};
+    Uint8 fg[4] = {100, 200, 100, 80};
+    Uint8 fb[4] = {100, 100, 200, 80};
+    for (int i = 0; i < 4; i++) {
         if (ed->transform_icons[i]) SDL_DestroyTexture(ed->transform_icons[i]);
         ed->transform_icons[i] = NULL;
         SDL_Surface *surf = IMG_Load(files[i]);
@@ -875,14 +877,16 @@ void render_toolbar(Editor *ed) {
     SDL_SetRenderDrawColor(ed->renderer, 70, 70, 70, 255);
     SDL_RenderFillRect(ed->renderer, &bar);
 
+    // 4 кнопки для правой кнопки мыши: поворот, отражение по горизонтали, по вертикали, удаление
     struct { int x; int mode; int icon_index; } btns[] = {
-        { MAP_X + 5,  RIGHT_ROTATE, 0 },
-        { MAP_X + 45, RIGHT_FLIP_H, 1 },
-        { MAP_X + 85, RIGHT_FLIP_V, 2 }
+        { MAP_X + 5,   RIGHT_ROTATE, 0 },
+        { MAP_X + 45,  RIGHT_FLIP_H, 1 },
+        { MAP_X + 85,  RIGHT_FLIP_V, 2 },
+        { MAP_X + 125, RIGHT_DELETE, 3 }
     };
     int btn_w = 38, btn_h = TOOLBAR_H - 6;
 
-    for (int i = 0; i < 3; i++) {
+    for (int i = 0; i < 4; i++) {
         SDL_Rect btn_rect = { btns[i].x, 3, btn_w, btn_h };
         bool active = (ed->right_click_mode == btns[i].mode);
         SDL_SetRenderDrawColor(ed->renderer, active ? 140 : 100, active ? 140 : 100, active ? 140 : 100, 255);
@@ -892,16 +896,16 @@ void render_toolbar(Editor *ed) {
             SDL_Rect icon_dst = { btn_rect.x + 3, btn_rect.y + 3, btn_rect.w - 6, btn_rect.h - 6 };
             SDL_RenderCopy(ed->renderer, ed->transform_icons[btns[i].icon_index], NULL, &icon_dst);
         } else {
-            const char *labels[] = {"R", "FH", "FV"};
+            const char *labels[] = {"R", "FH", "FV", "Del"};
             draw_text_centered(ed->renderer, ed->font, labels[i], btn_rect.x + btn_rect.w/2, btn_rect.y + btn_rect.h/2, (SDL_Color){255,255,255,255});
         }
     }
 
-    // Кнопки видимости слоёв
+    // Кнопки видимости слоёв (сдвинуты вправо)
     int vis_btn_w = 30;
     int vis_btn_h = btn_h;
     int vis_btn_y = 3;
-    int vis_btn_x1 = MAP_X + 140;
+    int vis_btn_x1 = MAP_X + 180;      // было 140 -> 180
     int vis_btn_x2 = vis_btn_x1 + vis_btn_w + 4;
 
     SDL_Rect vis1 = { vis_btn_x1, vis_btn_y, vis_btn_w, vis_btn_h };
@@ -941,12 +945,12 @@ void render_toolbar(Editor *ed) {
     char layer_label[2] = { '0' + ed->current_layer + 1, '\0' };
     draw_text_centered(ed->renderer, ed->font, layer_label,
                        layer_btn.x + btn_w/2, layer_btn.y + btn_h/2, (SDL_Color){255,255,255,255});
-    // Подсказка "Active Layer" справа от кнопки (без стрелки)
-    {
-        SDL_Color hint_color = {200, 200, 200, 255};  // светло-серый
-        int hint_x = active_btn_x + btn_w + 12;        // отступ от правого края кнопки
-        int hint_y = layer_btn.y + (layer_btn.h - FONT_SIZE) / 2; // по вертикали как на кнопке
 
+    // Подсказка "Active Layer" справа от кнопки
+    {
+        SDL_Color hint_color = {200, 200, 200, 255};
+        int hint_x = active_btn_x + btn_w + 12;
+        int hint_y = layer_btn.y + (layer_btn.h - FONT_SIZE) / 2;
         SDL_Surface* text_surf = TTF_RenderUTF8_Blended(ed->font, "Active Layer", hint_color);
         if (text_surf) {
             SDL_Texture* text_tex = SDL_CreateTextureFromSurface(ed->renderer, text_surf);
@@ -956,7 +960,8 @@ void render_toolbar(Editor *ed) {
             SDL_DestroyTexture(text_tex);
         }
     }
-}	
+}
+	
 // Карта
 void render_map(Editor *ed) {
     Map *map = current_map(ed);
@@ -1337,25 +1342,21 @@ void handle_input(Editor *ed, bool *running) {
                             ed->dialog_active_field = !ed->dialog_active_field;
                         break;
                     case SDLK_BACKSPACE: {
-                    // Запрещаем стирать имя музыки вручную
-                    if (ed->dialog_type == DIALOG_MUSIC_MAP && ed->dialog_active_field == 0) break;
-                    char *str = (ed->dialog_active_field == 0) ? ed->input_text : ed->input_text2;
-                    if (str && strlen(str) > 0)
-                        str[strlen(str)-1] = '\0';
-                    break;
+                        if (ed->dialog_type == DIALOG_MUSIC_MAP && ed->dialog_active_field == 0) break;
+                        char *str = (ed->dialog_active_field == 0) ? ed->input_text : ed->input_text2;
+                        if (str && strlen(str) > 0)
+                            str[strlen(str)-1] = '\0';
+                        break;
                     }
                 }
-            }
-    else if (e.type == SDL_TEXTINPUT) {
-    // Запрещаем ввод в поле имени музыки
-    if (ed->dialog_type == DIALOG_MUSIC_MAP && ed->dialog_active_field == 0) break;
-    char *dest = (ed->dialog_active_field == 0) ? ed->input_text : ed->input_text2;
-    int max_len = (ed->dialog_active_field == 1) ? 15 : 63;
-    if (dest && strlen(dest) < max_len) {
-        strcat(dest, e.text.text);
-    }
-}
-            else if (e.type == SDL_MOUSEBUTTONDOWN && e.button.button == SDL_BUTTON_LEFT) {
+            } else if (e.type == SDL_TEXTINPUT) {
+                if (ed->dialog_type == DIALOG_MUSIC_MAP && ed->dialog_active_field == 0) break;
+                char *dest = (ed->dialog_active_field == 0) ? ed->input_text : ed->input_text2;
+                int max_len = (ed->dialog_active_field == 1) ? 15 : 63;
+                if (dest && strlen(dest) < max_len) {
+                    strcat(dest, e.text.text);
+                }
+            } else if (e.type == SDL_MOUSEBUTTONDOWN && e.button.button == SDL_BUTTON_LEFT) {
                 SDL_Rect dlg = { WINDOW_W/2 - 180, WINDOW_H/2 - 110, 360, 220 };
                 if (ed->dialog_type == DIALOG_NEW_MAP ||
                     ed->dialog_type == DIALOG_RESIZE_MAP ||
@@ -1399,8 +1400,7 @@ void handle_input(Editor *ed, bool *running) {
                 if (ed->palette_scroll < 0) ed->palette_scroll = 0;
                 if (max_scroll > 0 && ed->palette_scroll > max_scroll)
                     ed->palette_scroll = max_scroll;
-            }
-            else if (mx >= MAP_X && mx < MAP_X + MAP_W &&
+            } else if (mx >= MAP_X && mx < MAP_X + MAP_W &&
                      my >= MAP_Y && my < MAP_Y + MAP_H) {
                 if (SDL_GetKeyboardState(NULL)[SDL_SCANCODE_LCTRL]) {
                     ed->zoom += e.wheel.y * 0.1f;
@@ -1420,7 +1420,7 @@ void handle_input(Editor *ed, bool *running) {
         if (e.type == SDL_MOUSEBUTTONUP && e.button.button == SDL_BUTTON_RIGHT) {
             ed->panning = 0;
         }
-		if (e.type == SDL_MOUSEBUTTONUP && e.button.button == SDL_BUTTON_LEFT) {
+        if (e.type == SDL_MOUSEBUTTONUP && e.button.button == SDL_BUTTON_LEFT) {
             ed->dialog_just_closed = false;
         }
 
@@ -1447,6 +1447,12 @@ void handle_input(Editor *ed, bool *running) {
                         case RIGHT_ROTATE: rot[idx] = (rot[idx] + 1) % 4; break;
                         case RIGHT_FLIP_H: mirror_x[idx] = !mirror_x[idx]; break;
                         case RIGHT_FLIP_V: mirror_y[idx] = !mirror_y[idx]; break;
+                        case RIGHT_DELETE:
+                            if (ed->current_layer == 0)
+                                map->tiles[idx] = -1;
+                            else
+                                map->tiles2[idx] = -1;
+                            break;
                     }
                 }
             }
@@ -1508,17 +1514,26 @@ void handle_input(Editor *ed, bool *running) {
 
             // Тулбар
             else if (my < TOOLBAR_H && mx >= MAP_X && mx < MAP_X + MAP_W) {
+                // Координаты кнопок (должны совпадать с render_toolbar)
+                int vis_btn_w = 30;
+                int vis_btn_x1 = MAP_X + 180;
+                int vis_btn_x2 = vis_btn_x1 + vis_btn_w + 4;
+                int active_btn_x = vis_btn_x2 + vis_btn_w + 8;
+                int btn_w = 38;
+
                 if (mx >= MAP_X+5 && mx < MAP_X+43)
                     ed->right_click_mode = RIGHT_ROTATE;
                 else if (mx >= MAP_X+45 && mx < MAP_X+83)
                     ed->right_click_mode = RIGHT_FLIP_H;
                 else if (mx >= MAP_X+85 && mx < MAP_X+123)
                     ed->right_click_mode = RIGHT_FLIP_V;
-                else if (mx >= MAP_X+140 && mx < MAP_X+170)
+                else if (mx >= MAP_X+125 && mx < MAP_X+163)
+                    ed->right_click_mode = RIGHT_DELETE;
+                else if (mx >= vis_btn_x1 && mx < vis_btn_x1+vis_btn_w)
                     ed->show_layer1 = !ed->show_layer1;
-                else if (mx >= MAP_X+174 && mx < MAP_X+204)
+                else if (mx >= vis_btn_x2 && mx < vis_btn_x2+vis_btn_w)
                     ed->show_layer2 = !ed->show_layer2;
-                else if (mx >= MAP_X+212 && mx < MAP_X+250)
+                else if (mx >= active_btn_x && mx < active_btn_x+btn_w)
                     ed->current_layer = !ed->current_layer;
                 else
                     ed->right_click_mode = 0;
@@ -1551,7 +1566,6 @@ void handle_input(Editor *ed, bool *running) {
 
             // Правая панель
             else if (mx >= WINDOW_W - RIGHT_PANEL_W) {
-                // удалить эту строку--- int pan_x = WINDOW_W - RIGHT_PANEL_W;
                 int list_y = 35;
 
                 for (int i = 0; i < ed->map_list.map_count; i++) {
@@ -1754,7 +1768,7 @@ int main(int argc, char *argv[]) {
     TTF_CloseFont(ed.font);
     for (int i = 0; i < 4; i++)
         if (ed.type_icons[i]) SDL_DestroyTexture(ed.type_icons[i]);
-    for (int i = 0; i < 3; i++)
+    for (int i = 0; i < 4; i++)
         if (ed.transform_icons[i]) SDL_DestroyTexture(ed.transform_icons[i]);
     for (int i = 0; i < ed.map_list.map_count; i++)
         map_free(&ed.map_list.maps[i]);
