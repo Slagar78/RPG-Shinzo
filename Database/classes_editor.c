@@ -7,6 +7,13 @@
 #include <windows.h>
 #include <commdlg.h>
 
+// Кроссплатформенное регистронезависимое сравнение строк
+#ifdef _WIN32
+#define strcasecmp _stricmp
+#else
+#include <strings.h>
+#endif
+
 extern cJSON *spells_json;
 extern int spells_count;
 extern cJSON *classes_json;
@@ -17,6 +24,14 @@ extern char error_msg[256];
 int draw_text_ext(SDL_Renderer *r, int x, int y, const char *text, SDL_Color color);
 char* open_file_dialog();
 
+// ========== ОПРЕДЕЛЕНИЯ КОНСТАНТ (все собраны в одном месте) ==========
+#define MAX_SPELLS_PER_CLASS 12
+#define MAX_VISIBLE_SPELLS 4
+#define MAX_CLASS_FIELDS 30
+#define BLINK_SPEED 30
+#define SAVE_BLINK_DURATION 90
+// ======================================================================
+
 static cJSON *classes = NULL;
 static int class_count = 0;
 static int selected_class = -1;
@@ -24,12 +39,14 @@ static int last_spell_btns_y = 0;
 static int up_arrow_rect_y = 0;
 static int down_arrow_rect_y = 0;
 
-#define BLINK_SPEED 30              // через сколько кадров менять состояние
+static int spell_levels[MAX_SPELLS_PER_CLASS];
+static int spell_levels_count = 0;
+static int selected_spell_level_idx = -1;
 
-static char  name_buf[11] = {0};
-static char  full_name_buf[17] = {0};
-static int   move_val = 5;
-static char  move_type_buf[32] = {"REGULAR"};
+static char name_buf[11] = {0};
+static char full_name_buf[17] = {0};
+static int move_val = 5;
+static char move_type_buf[32] = {"REGULAR"};
 
 typedef struct {
     int start;
@@ -39,7 +56,6 @@ typedef struct {
 static GrowthBlock growth[5];
 static const char *growth_names[] = {"HP", "MP", "Attack", "Defense", "Agility"};
 
-#define MAX_SPELLS_PER_CLASS 12
 typedef struct {
     int level;
     char spell_name[64];
@@ -57,12 +73,9 @@ static char spell_names[100][64];
 static int spell_name_count = 0;
 
 static int save_timer = 0;
-#define SAVE_BLINK_DURATION 90
 static int class_scroll = 0;
 static int spell_list_scroll = 0;
 
-#define MAX_VISIBLE_SPELLS 4  // сколько заклинаний показывать одновременно
-#define MAX_CLASS_FIELDS 30
 typedef struct {
     char text[256];
     int cursor;
@@ -79,6 +92,7 @@ static int class_active_field = -1;
 
 static int last_btn_y = 0;
 
+// Прототипы функций
 static void build_curve_list(void);
 static void build_spell_name_list(void);
 static void commit_class_changes(void);
@@ -87,10 +101,12 @@ static void open_class_fields(void);
 static void commit_class_field(int idx);
 static int  handle_class_input(SDL_Event *evt, int idx);
 static void draw_class_field(SDL_Renderer *r, int x, int y, int w, int h, int idx,
-const char *label, const char *display, int field_extra_x);
+                             const char *label, const char *display, int field_extra_x);
 static void add_new_class(void);
 static void delete_class(void);
+static void update_spell_levels(void);
 
+// static void build_curve_list
 static void build_curve_list(void) {
     curve_count = 0;
     extern cJSON *curves_json;
@@ -467,36 +483,72 @@ void classes_draw_edit_panel(SDL_Renderer *renderer, int px, int py) {
     const int visible = MAX_VISIBLE_SPELLS;
     const int total = class_spell_count;
 
-    // ----- Стрелка вверх (всегда рисуем) -----
+    // ----- Стрелка вверх -----
     int up_possible = (spell_list_scroll > 0);
     SDL_Color up_color = up_possible ? blue : gray;
-    up_arrow_rect_y = y;  // запоминаем Y для обработчика кликов
+    up_arrow_rect_y = y;
     SDL_Rect up_arrow = {px+20, y, 30, 30};
     SDL_SetRenderDrawColor(renderer, up_color.r, up_color.g, up_color.b, 255);
     SDL_RenderFillRect(renderer, &up_arrow);
     SDL_SetRenderDrawColor(renderer, white.r, white.g, white.b, 255);
     SDL_RenderDrawRect(renderer, &up_arrow);
     draw_text_ext(renderer, up_arrow.x+10, up_arrow.y+5, "^", white);
-    y += 30;   // сдвигаем после стрелки
+    y += 30;
 
-    // ----- Список заклинаний -----
+    // ----- Список заклинаний с кнопками имени (слева) и уровня (справа) -----
     for (int i = spell_list_scroll; i < total && i < spell_list_scroll + visible; i++) {
+        // Кнопки выбора имени (только для выбранного заклинания)
+        if (i == selected_spell_entry) {
+            // Кнопка "<<" (предыдущее имя)
+            SDL_Rect prev_name_btn = {px+20, y, 20, 20};
+            SDL_SetRenderDrawColor(renderer, blue.r, blue.g, blue.b, 255);
+            SDL_RenderFillRect(renderer, &prev_name_btn);
+            SDL_SetRenderDrawColor(renderer, white.r, white.g, white.b, 255);
+            SDL_RenderDrawRect(renderer, &prev_name_btn);
+            draw_text_ext(renderer, prev_name_btn.x+5, prev_name_btn.y+3, "<", white);
+
+            // Кнопка ">>" (следующее имя)
+            SDL_Rect next_name_btn = {px+45, y, 20, 20};
+            SDL_SetRenderDrawColor(renderer, blue.r, blue.g, blue.b, 255);
+            SDL_RenderFillRect(renderer, &next_name_btn);
+            SDL_SetRenderDrawColor(renderer, white.r, white.g, white.b, 255);
+            SDL_RenderDrawRect(renderer, &next_name_btn);
+            draw_text_ext(renderer, next_name_btn.x+5, next_name_btn.y+3, ">", white);
+        }
+
+        // Текст заклинания (сдвинут вправо)
         char buf[128];
-        snprintf(buf, sizeof(buf), "Lv %d: %s (Lv %d)", class_spells[i].level,
-                 class_spells[i].spell_name, class_spells[i].spell_level);
-        SDL_Rect rr = {px+20, y, 400, 20};
+        snprintf(buf, sizeof(buf), "%s (Lv %d)", class_spells[i].spell_name, class_spells[i].spell_level);
+        SDL_Rect rr = {px+70, y, 360, 20};
         if (i == selected_spell_entry) {
             SDL_SetRenderDrawColor(renderer, blue.r, blue.g, blue.b, 128);
             SDL_RenderFillRect(renderer, &rr);
         }
-        draw_text_ext(renderer, px+20, y, buf, white);
+        draw_text_ext(renderer, px+70, y, buf, white);
+
+        // Кнопки выбора уровня (только для выбранного заклинания)
+        if (i == selected_spell_entry && spell_levels_count > 0) {
+            SDL_Rect prev_lvl = {px+440, y, 20, 20};
+            SDL_SetRenderDrawColor(renderer, blue.r, blue.g, blue.b, 255);
+            SDL_RenderFillRect(renderer, &prev_lvl);
+            SDL_SetRenderDrawColor(renderer, white.r, white.g, white.b, 255);
+            SDL_RenderDrawRect(renderer, &prev_lvl);
+            draw_text_ext(renderer, prev_lvl.x+5, prev_lvl.y+3, "<", white);
+
+            SDL_Rect next_lvl = {px+465, y, 20, 20};
+            SDL_SetRenderDrawColor(renderer, blue.r, blue.g, blue.b, 255);
+            SDL_RenderFillRect(renderer, &next_lvl);
+            SDL_SetRenderDrawColor(renderer, white.r, white.g, white.b, 255);
+            SDL_RenderDrawRect(renderer, &next_lvl);
+            draw_text_ext(renderer, next_lvl.x+5, next_lvl.y+3, ">", white);
+        }
         y += 20;
     }
 
-    // ----- Стрелка вниз (всегда рисуем) -----
+    // ----- Стрелка вниз -----
     int down_possible = (spell_list_scroll + visible < total);
     SDL_Color down_color = down_possible ? blue : gray;
-    down_arrow_rect_y = y;  // запоминаем Y
+    down_arrow_rect_y = y;
     SDL_Rect down_arrow = {px+20, y, 30, 30};
     SDL_SetRenderDrawColor(renderer, down_color.r, down_color.g, down_color.b, 255);
     SDL_RenderFillRect(renderer, &down_arrow);
@@ -505,7 +557,7 @@ void classes_draw_edit_panel(SDL_Renderer *renderer, int px, int py) {
     draw_text_ext(renderer, down_arrow.x+10, down_arrow.y+5, "v", white);
     y += 30;
 
-    // Кнопки Add / Delete
+    // Кнопки Add / Delete (без изменений)
     SDL_Rect spell_add_btn = {px+20, y, 20, 20};
     SDL_SetRenderDrawColor(renderer, 100,200,100,255);
     SDL_RenderFillRect(renderer, &spell_add_btn);
@@ -519,10 +571,9 @@ void classes_draw_edit_panel(SDL_Renderer *renderer, int px, int py) {
     SDL_SetRenderDrawColor(renderer, 0,0,0,255);
     SDL_RenderDrawRect(renderer, &spell_del_btn);
     draw_text_ext(renderer, spell_del_btn.x+5, spell_del_btn.y+2, "-", black);
-    last_spell_btns_y = y;   // сохраняем Y для кнопок +/-
+    last_spell_btns_y = y;
 
     y += 24;
-
     int btn_y = y + 10;
     last_btn_y = btn_y;
 
@@ -593,17 +644,103 @@ void classes_handle_input(SDL_Event *evt) {
             return;
         }
 
-        // Y первого элемента списка
+        // Y первого элемента списка (с учётом стрелки вверх)
         int first_item_y = up_arrow_rect_y + 30;
         int visible = MAX_VISIBLE_SPELLS;
         int total = class_spell_count;
 
-        // Элементы списка
+        // Элементы списка, кнопки имени и уровня
         for (int i = spell_list_scroll; i < total && i < spell_list_scroll + visible; i++) {
-            SDL_Rect item = {px + 20, first_item_y + (i - spell_list_scroll) * 20, 400, 20};
+            int item_y = first_item_y + (i - spell_list_scroll) * 20;
+
+            // Кнопки выбора имени (только для выделенного заклинания)
+            if (i == selected_spell_entry) {
+                SDL_Rect prev_name_btn = {px + 20, item_y, 20, 20};
+                if (mx >= prev_name_btn.x && mx < prev_name_btn.x + prev_name_btn.w &&
+                    my >= prev_name_btn.y && my < prev_name_btn.y + prev_name_btn.h) {
+                    // Переключиться на предыдущее имя заклинания
+                    if (spell_name_count > 0) {
+                        int current_idx = -1;
+                        for (int k = 0; k < spell_name_count; k++) {
+                            if (strcasecmp(spell_names[k], class_spells[i].spell_name) == 0) {
+                                current_idx = k;
+                                break;
+                            }
+                        }
+                        if (current_idx == -1) current_idx = 0;
+                        int new_idx = current_idx - 1;
+                        if (new_idx < 0) new_idx = spell_name_count - 1;
+                        strncpy(class_spells[i].spell_name, spell_names[new_idx], 63);
+                        class_spells[i].spell_name[63] = '\0';
+                        // Сбросить уровень на минимальный доступный для нового имени
+                        update_spell_levels();
+                        if (spell_levels_count > 0)
+                            class_spells[i].spell_level = spell_levels[0];
+                        else
+                            class_spells[i].spell_level = 1;
+                        commit_class_changes();
+                    }
+                    return;
+                }
+
+                SDL_Rect next_name_btn = {px + 45, item_y, 20, 20};
+                if (mx >= next_name_btn.x && mx < next_name_btn.x + next_name_btn.w &&
+                    my >= next_name_btn.y && my < next_name_btn.y + next_name_btn.h) {
+                    // Переключиться на следующее имя заклинания
+                    if (spell_name_count > 0) {
+                        int current_idx = -1;
+                        for (int k = 0; k < spell_name_count; k++) {
+                            if (strcasecmp(spell_names[k], class_spells[i].spell_name) == 0) {
+                                current_idx = k;
+                                break;
+                            }
+                        }
+                        if (current_idx == -1) current_idx = 0;
+                        int new_idx = current_idx + 1;
+                        if (new_idx >= spell_name_count) new_idx = 0;
+                        strncpy(class_spells[i].spell_name, spell_names[new_idx], 63);
+                        class_spells[i].spell_name[63] = '\0';
+                        update_spell_levels();
+                        if (spell_levels_count > 0)
+                            class_spells[i].spell_level = spell_levels[0];
+                        else
+                            class_spells[i].spell_level = 1;
+                        commit_class_changes();
+                    }
+                    return;
+                }
+            }
+
+            // Область клика по тексту заклинания (сдвинута вправо)
+            SDL_Rect item = {px + 70, item_y, 360, 20};
             if (mx >= item.x && mx < item.x + item.w && my >= item.y && my < item.y + item.h) {
                 selected_spell_entry = i;
+                update_spell_levels();
                 return;
+            }
+
+            // Кнопки выбора уровня (только для выделенного заклинания)
+            if (i == selected_spell_entry && spell_levels_count > 0) {
+                SDL_Rect prev_lvl = {px + 440, item_y, 20, 20};
+                if (mx >= prev_lvl.x && mx < prev_lvl.x + prev_lvl.w &&
+                    my >= prev_lvl.y && my < prev_lvl.y + prev_lvl.h) {
+                    if (selected_spell_level_idx > 0) {
+                        selected_spell_level_idx--;
+                        class_spells[selected_spell_entry].spell_level = spell_levels[selected_spell_level_idx];
+                        commit_class_changes();
+                    }
+                    return;
+                }
+                SDL_Rect next_lvl = {px + 465, item_y, 20, 20};
+                if (mx >= next_lvl.x && mx < next_lvl.x + next_lvl.w &&
+                    my >= next_lvl.y && my < next_lvl.y + next_lvl.h) {
+                    if (selected_spell_level_idx < spell_levels_count - 1) {
+                        selected_spell_level_idx++;
+                        class_spells[selected_spell_entry].spell_level = spell_levels[selected_spell_level_idx];
+                        commit_class_changes();
+                    }
+                    return;
+                }
             }
         }
 
@@ -616,7 +753,7 @@ void classes_handle_input(SDL_Event *evt) {
             return;
         }
 
-        // Кнопки + / -
+        // Кнопки + / - (без изменений)
         SDL_Rect spell_add_btn = {px + 20, last_spell_btns_y, 20, 20};
         SDL_Rect spell_del_btn = {px + 50, last_spell_btns_y, 20, 20};
 
@@ -624,7 +761,7 @@ void classes_handle_input(SDL_Event *evt) {
             my >= spell_add_btn.y && my < spell_add_btn.y + spell_add_btn.h) {
             if (class_spell_count < MAX_SPELLS_PER_CLASS) {
                 class_spells[class_spell_count].level = 1;
-                strncpy(class_spells[class_spell_count].spell_name, "HEAL", 63);
+                strncpy(class_spells[class_spell_count].spell_name, "Heal", 63);
                 class_spells[class_spell_count].spell_level = 1;
                 class_spell_count++;
                 if (class_spell_count > visible)
@@ -830,4 +967,43 @@ void classes_handle_click(int mx, int my, int y_offset, int scroll) {
         y += 20;
     }
 }
+
+static void update_spell_levels(void) {
+    spell_levels_count = 0;
+    selected_spell_level_idx = -1;
+    
+    if (selected_spell_entry < 0 || selected_spell_entry >= class_spell_count) return;
+    
+    const char *spell_name = class_spells[selected_spell_entry].spell_name;
+    for (int i = 0; i < spells_count; i++) {
+        cJSON *spell = cJSON_GetArrayItem(spells_json, i);
+        if (_stricmp(cJSON_GetObjectItem(spell, "name")->valuestring, spell_name) == 0) {
+            int lv = cJSON_GetObjectItem(spell, "level")->valueint;
+            if (spell_levels_count < MAX_SPELLS_PER_CLASS) {
+                spell_levels[spell_levels_count++] = lv;
+            }
+        }
+    }
+    
+    // Сортируем уровни для удобства
+    for (int i = 0; i < spell_levels_count - 1; i++) {
+        for (int j = i + 1; j < spell_levels_count; j++) {
+            if (spell_levels[i] > spell_levels[j]) {
+                int tmp = spell_levels[i];
+                spell_levels[i] = spell_levels[j];
+                spell_levels[j] = tmp;
+            }
+        }
+    }
+    
+    // Находим текущий уровень
+    int current_level = class_spells[selected_spell_entry].spell_level;
+    for (int i = 0; i < spell_levels_count; i++) {
+        if (spell_levels[i] == current_level) {
+            selected_spell_level_idx = i;
+            break;
+        }
+    }
+}
+
 void classes_update_timer(void) { if (save_timer > 0) save_timer--; }

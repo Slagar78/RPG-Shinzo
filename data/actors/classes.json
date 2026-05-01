@@ -37,7 +37,11 @@
 				}, {
 					"level":	1,
 					"spell":	"AURA",
-					"spell_level":	1
+					"spell_level":	2
+				}, {
+					"level":	1,
+					"spell":	"Heal",
+					"spell_level":	3
 				}]
 		}, {
 			"id":	1,
