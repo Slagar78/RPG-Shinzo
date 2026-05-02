@@ -2,4 +2,6 @@ cd /d/RPG-Shinzo/RPG-Shinzo/TextEditor
 
 cd /d/RPG-Shinzo/RPG-Shinzo/Database
 
-cd /d/RPG-Shinzo/RPG-Shinzo//Map_editor
+cd /d/RPG-Shinzo/RPG-Shinzo/Map_editor
+
+cd /d/RPG-Shinzo/RPG-Shinzo/MapCreator

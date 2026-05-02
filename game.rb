@@ -65,24 +65,31 @@ class GameMap
     tex_h = @tileset_texture.height
     @full_cols = tex_w / @tile_size   # 16
     @full_rows = tex_h / @tile_size   # 16
-    @half_cols = @full_cols / 2       # 8
+    # @half_cols = @full_cols / 2       # 8
+	total_tiles = @full_cols * @full_rows
+    # Расширяем массив типов, если он меньше нужного
+    if @tile_types.length < total_tiles
+      @tile_types += Array.new(total_tiles - @tile_types.length, 0)
+    end
   end
 
-  # Новый метод: по ID тайла возвращает Rectangle – область в текстуре
+  # 
   def tile_src_rect(tile_id)
   return nil if tile_id.nil? || tile_id < 0
   return @src_rect_cache[tile_id] if @src_rect_cache.key?(tile_id)
 
-  if tile_id < 128
-    col = tile_id % @half_cols
-    row = tile_id / @half_cols
-  else
-    local_id = tile_id - 128
-    col = @half_cols + (local_id % @half_cols)
-    row = local_id / @half_cols
-  end
+  # Количество полос шириной 8 тайлов
+  strips = @full_cols / 8   # для 32 -> 4
+  rows_per_strip = @full_rows   # 32
 
-  rect = Rectangle.create(col * @tile_size, row * @tile_size, @tile_size, @tile_size)
+  strip = tile_id / (8 * rows_per_strip)   # в какой полосе (0..3)
+  local = tile_id % (8 * rows_per_strip)   # позиция внутри полосы
+
+  col = strip * 8 + (local % 8)   # столбец в тайлсете
+  row = local / 8                 # строка в тайлсете
+
+  rect = Rectangle.create(col * @tile_size, row * @tile_size,
+                          @tile_size, @tile_size)
   @src_rect_cache[tile_id] = rect
   rect
 end

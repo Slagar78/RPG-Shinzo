@@ -299,18 +299,20 @@ if (path[0] && path[1] == ':') {
     SDL_Surface *surface = IMG_Load(full_tileset);
     if (!surface) return 0;   // добавлена точка с запятой
 
-    int cols = surface->w / TILE_SIZE;
-    int rows = surface->h / TILE_SIZE;
-    int left_cols = cols / 2;
+int cols = surface->w / TILE_SIZE;
+int rows = surface->h / TILE_SIZE;
+int palette_cols = PALETTE_COLS;   // 8
+int strips = cols / palette_cols;  // 4 для 32×32
 
-    ed->tile_count = cols * rows;
-    ed->tiles = (SDL_Texture**)malloc(ed->tile_count * sizeof(SDL_Texture*));
+ed->tile_count = cols * rows;
+ed->tiles = (SDL_Texture**)malloc(ed->tile_count * sizeof(SDL_Texture*));
 
-    int idx = 0;
-
-    // левая половина
+int idx = 0;
+for (int strip = 0; strip < strips; strip++) {
+    int start_col = strip * palette_cols;
+    int end_col = start_col + palette_cols;
     for (int r = 0; r < rows; r++) {
-        for (int c = 0; c < left_cols; c++) {
+        for (int c = start_col; c < end_col; c++) {
             SDL_Rect src = { c * TILE_SIZE, r * TILE_SIZE, TILE_SIZE, TILE_SIZE };
             SDL_Surface *tile_surf = SDL_CreateRGBSurface(0, TILE_SIZE, TILE_SIZE, 32, 0,0,0,0);
             SDL_BlitSurface(surface, &src, tile_surf, NULL);
@@ -318,17 +320,7 @@ if (path[0] && path[1] == ':') {
             SDL_FreeSurface(tile_surf);
         }
     }
-
-    // правая половина
-    for (int r = 0; r < rows; r++) {
-        for (int c = left_cols; c < cols; c++) {
-            SDL_Rect src = { c * TILE_SIZE, r * TILE_SIZE, TILE_SIZE, TILE_SIZE };
-            SDL_Surface *tile_surf = SDL_CreateRGBSurface(0, TILE_SIZE, TILE_SIZE, 32, 0,0,0,0);
-            SDL_BlitSurface(surface, &src, tile_surf, NULL);
-            ed->tiles[idx++] = SDL_CreateTextureFromSurface(ed->renderer, tile_surf);
-            SDL_FreeSurface(tile_surf);
-        }
-    }
+}
 
     SDL_FreeSurface(surface);
     get_relative_path(path, ed->tileset_path, sizeof(ed->tileset_path));
