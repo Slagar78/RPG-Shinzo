@@ -49,7 +49,7 @@ static char g_map_name[64] = "";
 static UniqueTile *g_unique_tiles = NULL;
 static int g_unique_count = 0;
 
-static const char *g_tileset_folder = "..\\assets\\tilesets\\";
+static const char *g_tileset_folder = "../assets/tilesets/";
 
 static SDL_Rect btn_load = { 50, 400, 140, 40 };
 static SDL_Rect btn_save_tileset = { 220, 400, 140, 40 };
@@ -192,12 +192,12 @@ bool save_tileset_png(const char *filename, SDL_Surface *surface) {
 
 static void find_next_tileset_name(char *out, size_t out_len) {
     for (int i = 0; i < 1000; i++) {
-        snprintf(out, out_len, "%s\\tileset%03d.png", g_tileset_folder, i);
+        snprintf(out, out_len, "%s/tileset%03d.png", g_tileset_folder, i);
         FILE *f = fopen(out, "rb");
         if (!f) return;   // имя свободно
         fclose(f);
     }
-    snprintf(out, out_len, "%s\\tileset999.png", g_tileset_folder);
+    snprintf(out, out_len, "%s/tileset999.png", g_tileset_folder);
 }
 
 bool save_map_and_tileset(void) {
@@ -219,6 +219,11 @@ bool save_map_and_tileset(void) {
         rel_path[sizeof(rel_path)-1] = '\0';
     } else {
         snprintf(rel_path, sizeof(rel_path), "assets/tilesets/tileset000.png");
+    }
+	
+	// Приводим все обратные слеши к прямым (избегаем \\\\ в JSON)
+    for (char *p = rel_path; *p; p++) {
+    if (*p == '\\') *p = '/';
     }
 
     // 2. Загружаем исходное изображение, чтобы построить карту
