@@ -5,7 +5,6 @@ LFLAGS = -lmingw32 -lSDL2main -lSDL2 -lSDL2_image -lSDL2_ttf -lmingw32 -mwindows
 
 all: MapCreator.exe
 
-# Основная цель зависит от map_creator.o и ../cJSON.o
 MapCreator.exe: map_creator.o ../cJSON.o
 	$(CC) -o $@ $^ $(LFLAGS)
 

@@ -1,6 +1,7 @@
 /*
- * MapCreator — генератор тайлсетов 1536×1536 (RGBA) до 1024 уникальных тайлов.
- * Загружает PNG, находит уникальные тайлы, сохраняет тайлсет и карту (JSON).
+ * MapCreator — простой генератор тайлсетов (без поворотов).
+ * Каждый уникальный тайл сохраняется “как есть” — без приведения к канонической форме.
+ * Карта записывается без поворотов и отражений (rot=0, mirror_x/mirror_y = false).
  */
 
 #define SDL_MAIN_HANDLED
@@ -19,20 +20,19 @@
 #include "../cJSON.h"
 
 #define TILE_SIZE       48
-#define TILE_PIXELS     (TILE_SIZE * TILE_SIZE)
-#define TILE_BYTES      (TILE_PIXELS * 4)
-#define MAX_TILES       1024
-#define TILESET_DIM     32
-#define TILESET_WIDTH   (TILESET_DIM * TILE_SIZE)
-#define TILESET_HEIGHT  (TILESET_DIM * TILE_SIZE)
+#define TILE_PIXELS     (TILE_SIZE * TILE_SIZE)          // 2304
+#define TILE_BYTES      (TILE_PIXELS * 4)                // 9216 (RGBA)
+#define MAX_TILES       1024   // при необходимости увеличьте до 2048
+#define TILESET_DIM     32     // 32×32 тайла
+#define TILESET_WIDTH   (TILESET_DIM * TILE_SIZE)        // 1536
+#define TILESET_HEIGHT  (TILESET_DIM * TILE_SIZE)        // 1536
 
 typedef struct {
     uint32_t pixels[TILE_PIXELS];
 } TileRGBA;
 
 typedef struct {
-    TileRGBA original;
-    TileRGBA canonical;
+    TileRGBA original;      // точная копия, как вырезан из карты
 } UniqueTile;
 
 static SDL_Window   *g_window = NULL;
@@ -94,76 +94,13 @@ bool save_file_dialog(char *out_path, size_t out_len) {
     return false;
 }
 
+// ---------- Простое сравнение тайлов (без поворотов) ----------
 
-// ---------- Поворот и отражение (RGBA, плоский массив) ----------
-
-static void rotate_tile_90_rgba(const TileRGBA *src, TileRGBA *dst) {
-    for (int y = 0; y < TILE_SIZE; y++) {
-        for (int x = 0; x < TILE_SIZE; x++) {
-            int new_x = TILE_SIZE - 1 - y;
-            int new_y = x;
-            int src_idx = y * TILE_SIZE + x;
-            int dst_idx = new_y * TILE_SIZE + new_x;
-            dst->pixels[dst_idx] = src->pixels[src_idx];
-        }
-    }
-}
-
-static void flip_tile_h_rgba(const TileRGBA *src, TileRGBA *dst) {
-    for (int y = 0; y < TILE_SIZE; y++) {
-        for (int x = 0; x < TILE_SIZE; x++) {
-            int src_idx = y * TILE_SIZE + x;
-            int dst_idx = y * TILE_SIZE + (TILE_SIZE - 1 - x);
-            dst->pixels[dst_idx] = src->pixels[src_idx];
-        }
-    }
-}
-
-void generate_orientations_rgba(const TileRGBA *tile, TileRGBA out[8]) {
-    memcpy(&out[0], tile, sizeof(TileRGBA));
-    rotate_tile_90_rgba(&out[0], &out[1]);
-    rotate_tile_90_rgba(&out[1], &out[2]);
-    rotate_tile_90_rgba(&out[2], &out[3]);
-
-    flip_tile_h_rgba(&out[0], &out[4]);
-    flip_tile_h_rgba(&out[1], &out[5]);
-    flip_tile_h_rgba(&out[2], &out[6]);
-    flip_tile_h_rgba(&out[3], &out[7]);
-}
-
-// Сравнение двух тайлов только по RGB, игнорируя альфа-канал
 int compare_tiles_rgba(const TileRGBA *a, const TileRGBA *b) {
-    for (int i = 0; i < TILE_PIXELS; i++) {
-        uint32_t pa = a->pixels[i];
-        uint32_t pb = b->pixels[i];
-        uint32_t rgb_a = pa & 0x00FFFFFF;
-        uint32_t rgb_b = pb & 0x00FFFFFF;
-        if (rgb_a != rgb_b) {
-            return (rgb_a < rgb_b) ? -1 : 1;
-        }
-    }
-    return 0;
+    return memcmp(a->pixels, b->pixels, sizeof(a->pixels));
 }
 
-void get_canonical_rgba(const TileRGBA *tile, TileRGBA *canonical) {
-    TileRGBA orientations[8];
-    generate_orientations_rgba(tile, orientations);
-    *canonical = orientations[0];
-    for (int i = 1; i < 8; i++) {
-        if (compare_tiles_rgba(&orientations[i], canonical) < 0) {
-            *canonical = orientations[i];
-        }
-    }
-}
-
-bool is_tile_unique_rgba(const TileRGBA *canonical, UniqueTile *list, int count) {
-    for (int i = 0; i < count; i++) {
-        if (compare_tiles_rgba(canonical, &list[i].canonical) == 0) return false;
-    }
-    return true;
-}
-
-// ---------- Извлечение уникальных тайлов (RGBA) ----------
+// ---------- Извлечение уникальных тайлов (простое, без ориентаций) ----------
 
 int extract_unique_tiles_rgba(SDL_Surface *image, UniqueTile *list, int max_tiles, bool *limit_reached) {
     if (limit_reached) *limit_reached = false;
@@ -184,13 +121,18 @@ int extract_unique_tiles_rgba(SDL_Surface *image, UniqueTile *list, int max_tile
                 memcpy(&tile.pixels[y * TILE_SIZE], src_row, TILE_SIZE * sizeof(uint32_t));
             }
 
-            TileRGBA canon;
-            get_canonical_rgba(&tile, &canon);
+            // Проверяем, есть ли точно такой тайл уже в списке
+            bool found = false;
+            for (int u = 0; u < unique_count; u++) {
+                if (compare_tiles_rgba(&tile, &list[u].original) == 0) {
+                    found = true;
+                    break;
+                }
+            }
 
-            if (is_tile_unique_rgba(&canon, list, unique_count)) {
+            if (!found) {
                 if (unique_count < max_tiles) {
                     list[unique_count].original = tile;
-                    list[unique_count].canonical = canon;
                     unique_count++;
                 } else {
                     if (limit_reached) *limit_reached = true;
@@ -203,7 +145,7 @@ int extract_unique_tiles_rgba(SDL_Surface *image, UniqueTile *list, int max_tile
     return unique_count;
 }
 
-// ---------- Построение тайлсета 1536×1536 (RGBA) столбцами 8×32 слева направо ----------
+// ---------- Построение тайлсета (столбцами по 8) ----------
 
 SDL_Surface* build_tileset_rgba(UniqueTile *list, int count) {
     SDL_Surface *ts = SDL_CreateRGBSurface(0, TILESET_WIDTH, TILESET_HEIGHT, 32,
@@ -212,10 +154,10 @@ SDL_Surface* build_tileset_rgba(UniqueTile *list, int count) {
     SDL_FillRect(ts, NULL, SDL_MapRGBA(ts->format, 255,255,255,255));
 
     int fill = (count > MAX_TILES) ? MAX_TILES : count;
-    int palette_cols = 8;   // как в редакторе PALETTE_COLS
+    int palette_cols = 8;   // PALETTE_COLS редактора
     int strips = TILESET_DIM / palette_cols;   // 4
 
-    int tile_idx = 0;   // номер тайла из массива list
+    int tile_idx = 0;
     for (int strip = 0; strip < strips && tile_idx < fill; strip++) {
         int start_col = strip * palette_cols;
         for (int row = 0; row < TILESET_DIM && tile_idx < fill; row++) {
@@ -246,37 +188,15 @@ bool save_tileset_png(const char *filename, SDL_Surface *surface) {
     return result != 0;
 }
 
-// ---------- Сохранение карты (JSON) и автосохранение тайлсета ----------
+// ---------- Сохранение карты (JSON) без поворотов ----------
 
-// Определяет поворот и отражение оригинального тайла относительно канонического
-static void get_tile_orientation(const TileRGBA *original, const TileRGBA *canonical,
-                                 int *rot, int *mirror_x, int *mirror_y) {
-    TileRGBA orientations[8];
-    generate_orientations_rgba(canonical, orientations);
-    for (int i = 0; i < 8; i++) {
-        if (compare_tiles_rgba(original, &orientations[i]) == 0) {
-            if (i < 4) {
-                *rot = i; *mirror_x = 0; *mirror_y = 0;
-            } else {
-                *rot = i - 4;
-                *mirror_x = 1; *mirror_y = 0;
-            }
-            return;
-        }
-    }
-    *rot = 0; *mirror_x = 0; *mirror_y = 0;
-}
-
-// Автоматически подбирает имя tileset%03d.png, которое ещё не занято
 static void find_next_tileset_name(char *out, size_t out_len) {
     for (int i = 0; i < 1000; i++) {
         snprintf(out, out_len, "%s\\tileset%03d.png", g_tileset_folder, i);
-        // Проверяем, не существует ли файл
         FILE *f = fopen(out, "rb");
         if (!f) return;   // имя свободно
         fclose(f);
     }
-    // Если все заняты, вернём tileset999.png
     snprintf(out, out_len, "%s\\tileset999.png", g_tileset_folder);
 }
 
@@ -291,7 +211,7 @@ bool save_map_and_tileset(void) {
         return false;
     }
 
-    // Формируем относительный путь для JSON (начинается с assets/...)
+    // Формируем относительный путь для JSON
     char rel_path[256];
     const char *assets = strstr(tileset_path, "assets");
     if (assets) {
@@ -328,27 +248,27 @@ bool save_map_and_tileset(void) {
                 uint32_t *row = (uint32_t*)(pixels + img_y * rgba->pitch + tx * TILE_SIZE * 4);
                 memcpy(&tile.pixels[y * TILE_SIZE], row, TILE_SIZE * sizeof(uint32_t));
             }
-            TileRGBA canon;
-            get_canonical_rgba(&tile, &canon);
+
+            // Ищем индекс этого точного тайла в массиве уникальных
             int idx = 0;
             for (int u = 0; u < g_unique_count; u++) {
-                if (compare_tiles_rgba(&canon, &g_unique_tiles[u].canonical) == 0) {
+                if (compare_tiles_rgba(&tile, &g_unique_tiles[u].original) == 0) {
                     idx = u;
                     break;
                 }
             }
-            int rot, mx, my;
-            get_tile_orientation(&tile, &g_unique_tiles[idx].canonical, &rot, &mx, &my);
+
+            // Всегда записываем без поворотов и отражений
             int pos = tx * tiles_y + ty;
             tiles_arr[pos] = idx;
-            rot_arr[pos]   = rot;
-            mx_arr[pos]    = mx;
-            my_arr[pos]    = my;
+            rot_arr[pos]   = 0;
+            mx_arr[pos]    = 0;
+            my_arr[pos]    = 0;
         }
     }
     SDL_FreeSurface(rgba);
 
-    // 3. Строим JSON
+    // 3. Строим JSON (аналогично map_editor, только rot/mirror всегда 0)
     cJSON *root = cJSON_CreateObject();
     cJSON_AddStringToObject(root, "name", g_map_name);
     cJSON_AddNumberToObject(root, "width", tiles_x);
@@ -398,7 +318,8 @@ bool save_map_and_tileset(void) {
     return true;
 }
 
-// Вспомогательная функция для отрисовки текста на кнопке
+// ---------- Отрисовка кнопок ----------
+
 void draw_button_text(SDL_Renderer *ren, TTF_Font *font, SDL_Rect *btn, const char *text) {
     SDL_Color white = {255, 255, 255, 255};
     SDL_Surface *s = TTF_RenderUTF8_Blended(font, text, white);
@@ -484,10 +405,9 @@ void process_image(const char *filename) {
     bool limit_reached = false;
     int unique_count = extract_unique_tiles_rgba(img, unique_tiles, MAX_TILES, &limit_reached);
 
-    // Сохраняем исходное имя файла (для будущего сохранения карты)
+    // Сохраняем исходное имя файла
     strncpy(g_source_image_path, filename, sizeof(g_source_image_path)-1);
     g_source_image_path[sizeof(g_source_image_path)-1] = '\0';
-    // Извлекаем имя карты
     const char *base = strrchr(filename, '\\');
     if (!base) base = strrchr(filename, '/');
     if (!base) base = filename; else base++;
@@ -518,7 +438,6 @@ void process_image(const char *filename) {
     if (g_tileset_surface) SDL_FreeSurface(g_tileset_surface);
     g_tileset_surface = ts;
 
-    // Сохраняем уникальные тайлы для создания карты
     if (g_unique_tiles) free(g_unique_tiles);
     g_unique_tiles = unique_tiles;
     g_unique_count = unique_count;
@@ -564,7 +483,6 @@ int main(int argc, char *argv[]) {
                 }
                 else if (mx >= btn_save_tileset.x && mx < btn_save_tileset.x+btn_save_tileset.w &&
                          my >= btn_save_tileset.y && my < btn_save_tileset.y+btn_save_tileset.h) {
-                    // Ручное сохранение тайлсета (проводник), как раньше
                     if (g_ready_to_save && g_tileset_surface) {
                         char savepath[260];
                         if (save_file_dialog(savepath, sizeof(savepath))) {
@@ -579,7 +497,6 @@ int main(int argc, char *argv[]) {
                 }
                 else if (mx >= btn_save_map.x && mx < btn_save_map.x+btn_save_map.w &&
                          my >= btn_save_map.y && my < btn_save_map.y+btn_save_map.h) {
-                    // Автоматическое сохранение тайлсета и карты
                     if (g_map_ready) {
                         save_map_and_tileset();
                     }
