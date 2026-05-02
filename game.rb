@@ -182,13 +182,16 @@ def draw_under_tiles_visible(camera)
   start_y = [ (view_top / @tile_size).floor - 1, 0 ].max
   end_y   = [ (view_bottom / @tile_size).ceil + 1, @height ].min
 
+  half_tile = @tile_size / 2.0
+  center_vec = Vector2.create(half_tile, half_tile)  # точка вращения в центре тайла
+
   (start_x...end_x).each do |x|
     (start_y...end_y).each do |y|
       tile_id = @tiles[x][y]
       next if tile_id.nil? || tile_id < 0
 
       type = @tile_types[tile_id] || 0
-      next unless type == 3
+      next unless type == 3               # рисуем только «under»-тайлы
 
       src = tile_src_rect(tile_id)
       next unless src
@@ -197,18 +200,19 @@ def draw_under_tiles_visible(camera)
       flip_x = @mirror_x[x][y] || false
       flip_y = @mirror_y[x][y] || false
 
-      dst_x = x * @tile_size
-      dst_y = y * @tile_size
-      dst_w = flip_x ? -@tile_size : @tile_size
-      dst_h = flip_y ? -@tile_size : @tile_size
+      # Центр клетки в мировых координатах
+      world_center_x = x * @tile_size + half_tile
+      world_center_y = y * @tile_size + half_tile
 
-      dst_x += @tile_size if flip_x
-      dst_y += @tile_size if flip_y
+      dst = Rectangle.create(
+        world_center_x,
+        world_center_y,
+        flip_x ? -@tile_size : @tile_size,
+        flip_y ? -@tile_size : @tile_size
+      )
 
-      dst = Rectangle.create(dst_x, dst_y, dst_w, dst_h)
       angle = rot * 90.0
-
-      DrawTexturePro(@tileset_texture, src, dst, @zero_vec, angle, WHITE)
+      DrawTexturePro(@tileset_texture, src, dst, center_vec, angle, WHITE)
     end
   end
 end
