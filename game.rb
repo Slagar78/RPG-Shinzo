@@ -70,6 +70,7 @@ class GameMap
     @tile_size = 48
     @dst_rect = Rectangle.create(0, 0, @tile_size, @tile_size)
     @zero_vec = Vector2.create(0, 0)
+	@center_vec = Vector2.create(@tile_size / 2.0, @tile_size / 2.0)
 
     # Размеры тайлсета
     tex_w = @tileset_texture.width
@@ -104,22 +105,6 @@ class GameMap
   @src_rect_cache[tile_id] = rect
   rect
 end
-
-  def draw
-    return unless @tileset_texture
-    (0...@width).each do |x|
-      (0...@height).each do |y|
-        tile_id = @tiles[x][y]
-        next if tile_id.nil? || tile_id < 0
-        src = tile_src_rect(tile_id)
-        next unless src
-        dst = @dst_rect
-        dst.x = x * @tile_size
-        dst.y = y * @tile_size
-        DrawTexturePro(@tileset_texture, src, dst, @zero_vec, 0, WHITE)
-      end
-    end
-  end
 
   def draw_under_tiles
     return unless @tileset_texture
@@ -161,12 +146,25 @@ def draw_visible(camera)
       src = tile_src_rect(tile_id)
       next unless src
 
-      # Переиспользуем закешированный прямоугольник
-      dst = @dst_rect
-      dst.x = x * @tile_size
-      dst.y = y * @tile_size
+      # Параметры тайла
+      rot = @rot[x][y] || 0
+      flip_x = @mirror_x[x][y] || false
+      flip_y = @mirror_y[x][y] || false
 
-      DrawTexturePro(@tileset_texture, src, dst, @zero_vec, 0, WHITE)
+      # Прямоугольник назначения с учётом отражений
+      dest_w = flip_x ? -@tile_size : @tile_size
+      dest_h = flip_y ? -@tile_size : @tile_size
+      dst = Rectangle.create(
+        x * @tile_size,
+        y * @tile_size,
+        dest_w,
+        dest_h
+      )
+
+      # Угол поворота (rot * 90 градусов)
+      angle = rot * 90.0
+
+      DrawTexturePro(@tileset_texture, src, dst, @center_vec, angle, WHITE)
     end
   end
 end
@@ -195,11 +193,21 @@ def draw_under_tiles_visible(camera)
       src = tile_src_rect(tile_id)
       next unless src
 
-      dst = @dst_rect
-      dst.x = x * @tile_size
-      dst.y = y * @tile_size
+      rot = @rot[x][y] || 0
+      flip_x = @mirror_x[x][y] || false
+      flip_y = @mirror_y[x][y] || false
 
-      DrawTexturePro(@tileset_texture, src, dst, @zero_vec, 0, WHITE)
+      dest_w = flip_x ? -@tile_size : @tile_size
+      dest_h = flip_y ? -@tile_size : @tile_size
+      dst = Rectangle.create(
+        x * @tile_size,
+        y * @tile_size,
+        dest_w,
+        dest_h
+      )
+
+      angle = rot * 90.0
+      DrawTexturePro(@tileset_texture, src, dst, @center_vec, angle, WHITE)
     end
   end
 end
