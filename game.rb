@@ -451,25 +451,20 @@ end
       @pending_status_open = false
       @game_state = :status
     end
-    if @game_state == :playing
-      target_x = @player.visual_x + @game_map.tile_size / 2.0
-      target_y = @player.visual_y + @game_map.tile_size / 2.0
+ if @game_state == :playing
+  target_x = @player.visual_x + @game_map.tile_size / 2.0
+  target_y = @player.visual_y + @game_map.tile_size / 2.0
 
-      half_w = 288
-      half_h = 240
-      max_x = @game_map.width * @game_map.tile_size - half_w
-      max_y = @game_map.height * @game_map.tile_size - half_h
+  half_w = 288
+  half_h = 240
+  max_x = @game_map.width * @game_map.tile_size - half_w
+  max_y = @game_map.height * @game_map.tile_size - half_h
 
-      target_x = clamp(target_x, half_w, max_x) if max_x > half_w
-      target_y = clamp(target_y, half_h, max_y) if max_y > half_h
+  target_x = clamp(target_x, half_w, max_x) if max_x > half_w
+  target_y = clamp(target_y, half_h, max_y) if max_y > half_h
 
-      cam_x = @camera.target.x
-      cam_y = @camera.target.y
-      smooth = 0.15
-      cam_x = lerp(cam_x, target_x, smooth)
-      cam_y = lerp(cam_y, target_y, smooth)
-      @camera.target = Vector2.create(cam_x, cam_y)   # без round!
-    end
+  @camera.target = Vector2.create(target_x, target_y)   # ← ЖЁСТКО
+end
 	
 	# Ожидание закрытия окна Use/Give/Drop/Equip
     if @pending_items_close && @active_item_action && !@active_item_action.visible
