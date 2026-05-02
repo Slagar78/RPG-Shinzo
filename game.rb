@@ -146,25 +146,23 @@ def draw_visible(camera)
       src = tile_src_rect(tile_id)
       next unless src
 
-      # Параметры тайла
       rot = @rot[x][y] || 0
       flip_x = @mirror_x[x][y] || false
       flip_y = @mirror_y[x][y] || false
 
-      # Прямоугольник назначения с учётом отражений
-      dest_w = flip_x ? -@tile_size : @tile_size
-      dest_h = flip_y ? -@tile_size : @tile_size
-      dst = Rectangle.create(
-        x * @tile_size,
-        y * @tile_size,
-        dest_w,
-        dest_h
-      )
+      # Вычисляем позицию и размеры с учётом flip
+      dst_x = x * @tile_size
+      dst_y = y * @tile_size
+      dst_w = flip_x ? -@tile_size : @tile_size
+      dst_h = flip_y ? -@tile_size : @tile_size
 
-      # Угол поворота (rot * 90 градусов)
+      dst_x += @tile_size if flip_x
+      dst_y += @tile_size if flip_y
+
+      dst = Rectangle.create(dst_x, dst_y, dst_w, dst_h)
       angle = rot * 90.0
 
-      DrawTexturePro(@tileset_texture, src, dst, @center_vec, angle, WHITE)
+      DrawTexturePro(@tileset_texture, src, dst, @zero_vec, angle, WHITE)
     end
   end
 end
@@ -197,17 +195,18 @@ def draw_under_tiles_visible(camera)
       flip_x = @mirror_x[x][y] || false
       flip_y = @mirror_y[x][y] || false
 
-      dest_w = flip_x ? -@tile_size : @tile_size
-      dest_h = flip_y ? -@tile_size : @tile_size
-      dst = Rectangle.create(
-        x * @tile_size,
-        y * @tile_size,
-        dest_w,
-        dest_h
-      )
+      dst_x = x * @tile_size
+      dst_y = y * @tile_size
+      dst_w = flip_x ? -@tile_size : @tile_size
+      dst_h = flip_y ? -@tile_size : @tile_size
 
+      dst_x += @tile_size if flip_x
+      dst_y += @tile_size if flip_y
+
+      dst = Rectangle.create(dst_x, dst_y, dst_w, dst_h)
       angle = rot * 90.0
-      DrawTexturePro(@tileset_texture, src, dst, @center_vec, angle, WHITE)
+
+      DrawTexturePro(@tileset_texture, src, dst, @zero_vec, angle, WHITE)
     end
   end
 end
