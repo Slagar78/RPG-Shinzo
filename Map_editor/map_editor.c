@@ -546,6 +546,7 @@ void map_save_to_json(const Map *map, const char *filename) {
     cJSON_AddNumberToObject(music, "volume", map->music_volume);
     cJSON_AddItemToObject(root, "music", music);
 
+    // Первый слой (всегда сохраняется)
     cJSON *t  = cJSON_AddArrayToObject(root, "tiles");
     cJSON *r  = cJSON_AddArrayToObject(root, "rot");
     cJSON *mx = cJSON_AddArrayToObject(root, "mirror_x");
@@ -571,27 +572,40 @@ void map_save_to_json(const Map *map, const char *filename) {
         cJSON_AddItemToArray(my, col_my);
     }
 
-    cJSON *t2  = cJSON_AddArrayToObject(root, "tiles2");
-    cJSON *r2  = cJSON_AddArrayToObject(root, "rot2");
-    cJSON *mx2 = cJSON_AddArrayToObject(root, "mirror_x2");
-    cJSON *my2 = cJSON_AddArrayToObject(root, "mirror_y2");
-
-    for (int x = 0; x < map->width; x++) {
-        cJSON *col_t2  = cJSON_CreateArray();
-        cJSON *col_r2  = cJSON_CreateArray();
-        cJSON *col_mx2 = cJSON_CreateArray();
-        cJSON *col_my2 = cJSON_CreateArray();
-        for (int y = 0; y < map->height; y++) {
-            int idx = x * map->height + y;
-            cJSON_AddItemToArray(col_t2,  cJSON_CreateNumber(map->tiles2[idx]));
-            cJSON_AddItemToArray(col_r2,  cJSON_CreateNumber(map->rot2[idx]));
-            cJSON_AddItemToArray(col_mx2, cJSON_CreateBool(map->mirror_x2[idx]));
-            cJSON_AddItemToArray(col_my2, cJSON_CreateBool(map->mirror_y2[idx]));
+    // Проверяем, есть ли во втором слое хоть один тайл (не -1)
+    bool has_layer2 = false;
+    int total_tiles = map->width * map->height;
+    for (int i = 0; i < total_tiles; i++) {
+        if (map->tiles2[i] != -1) {
+            has_layer2 = true;
+            break;
         }
-        cJSON_AddItemToArray(t2,  col_t2);
-        cJSON_AddItemToArray(r2,  col_r2);
-        cJSON_AddItemToArray(mx2, col_mx2);
-        cJSON_AddItemToArray(my2, col_my2);
+    }
+
+    // Второй слой сохраняется только если он не пуст
+    if (has_layer2) {
+        cJSON *t2  = cJSON_AddArrayToObject(root, "tiles2");
+        cJSON *r2  = cJSON_AddArrayToObject(root, "rot2");
+        cJSON *mx2 = cJSON_AddArrayToObject(root, "mirror_x2");
+        cJSON *my2 = cJSON_AddArrayToObject(root, "mirror_y2");
+
+        for (int x = 0; x < map->width; x++) {
+            cJSON *col_t2  = cJSON_CreateArray();
+            cJSON *col_r2  = cJSON_CreateArray();
+            cJSON *col_mx2 = cJSON_CreateArray();
+            cJSON *col_my2 = cJSON_CreateArray();
+            for (int y = 0; y < map->height; y++) {
+                int idx = x * map->height + y;
+                cJSON_AddItemToArray(col_t2,  cJSON_CreateNumber(map->tiles2[idx]));
+                cJSON_AddItemToArray(col_r2,  cJSON_CreateNumber(map->rot2[idx]));
+                cJSON_AddItemToArray(col_mx2, cJSON_CreateBool(map->mirror_x2[idx]));
+                cJSON_AddItemToArray(col_my2, cJSON_CreateBool(map->mirror_y2[idx]));
+            }
+            cJSON_AddItemToArray(t2,  col_t2);
+            cJSON_AddItemToArray(r2,  col_r2);
+            cJSON_AddItemToArray(mx2, col_mx2);
+            cJSON_AddItemToArray(my2, col_my2);
+        }
     }
 
     char *str = cJSON_Print(root);
