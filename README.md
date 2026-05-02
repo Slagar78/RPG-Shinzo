@@ -76,12 +76,11 @@ RPG-Shinzo/
 | Язык              | Ruby 4.0.2 (проверено, но подходят 3.2+) |
 | Графика / Ввод    | Raylib 5.5+ (через гем `raylib-bindings 0.7.18`) |
 ------
-
-
-
-
-
+gem install ocran -v 1.4.3
 ---
+сборка в .exe
+выполните ---          ocran game.rb
+елси без консоли собирать то ---        ocran game.rb --windows --output Shinzo.exe
 
 ## 🚀 Быстрый старт
 
