@@ -149,7 +149,7 @@ static void save_start_inventory_for_actor(int actor_id) {
         for (int i = 0; i < 4; i++) {
             cJSON *slot = cJSON_CreateObject();
             cJSON_AddStringToObject(slot, "item", start_items[i]);
-            cJSON_AddNumberToObject(slot, "equipped", start_items_equipped[i] ? 1 : 0);
+            cJSON_AddBoolToObject(slot, "equipped", start_items_equipped[i] ? 1 : 0);
             cJSON_AddItemToArray(items_arr, slot);
         }
         cJSON_AddItemToObject(entry, "items", items_arr);
@@ -161,7 +161,7 @@ static void save_start_inventory_for_actor(int actor_id) {
         for (int i = 0; i < 4; i++) {
             cJSON *slot = cJSON_CreateObject();
             cJSON_AddStringToObject(slot, "item", start_items[i]);
-            cJSON_AddNumberToObject(slot, "equipped", start_items_equipped[i] ? 1 : 0);
+            cJSON_AddBoolToObject(slot, "equipped", start_items_equipped[i] ? 1 : 0);
             cJSON_AddItemToArray(items_arr, slot);
         }
         cJSON_AddItemToObject(entry, "items", items_arr);
