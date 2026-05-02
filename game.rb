@@ -127,7 +127,6 @@ end
 # === ОПТИМИЗИРОВАННЫЕ МЕТОДЫ С ОТСЕЧЕНИЕМ ===
 def draw_visible(camera)
   return unless @tileset_texture
-
   view_left   = camera.target.x - camera.offset.x
   view_right  = camera.target.x + camera.offset.x
   view_top    = camera.target.y - camera.offset.y
@@ -137,6 +136,9 @@ def draw_visible(camera)
   end_x   = [ (view_right / @tile_size).ceil + 1, @width ].min
   start_y = [ (view_top / @tile_size).floor - 1, 0 ].max
   end_y   = [ (view_bottom / @tile_size).ceil + 1, @height ].min
+
+  half_tile = @tile_size / 2.0
+  center_vec = Vector2.create(half_tile, half_tile)  # общий вектор центра
 
   (start_x...end_x).each do |x|
     (start_y...end_y).each do |y|
@@ -150,19 +152,19 @@ def draw_visible(camera)
       flip_x = @mirror_x[x][y] || false
       flip_y = @mirror_y[x][y] || false
 
-      # Вычисляем позицию и размеры с учётом flip
-      dst_x = x * @tile_size
-      dst_y = y * @tile_size
-      dst_w = flip_x ? -@tile_size : @tile_size
-      dst_h = flip_y ? -@tile_size : @tile_size
+      # Центр тайла в мировых координатах
+      world_center_x = x * @tile_size + half_tile
+      world_center_y = y * @tile_size + half_tile
 
-      dst_x += @tile_size if flip_x
-      dst_y += @tile_size if flip_y
+      dst = Rectangle.create(
+        world_center_x,                # x будет центром (origin.x внутри текстуры)
+        world_center_y,                # y
+        flip_x ? -@tile_size : @tile_size,
+        flip_y ? -@tile_size : @tile_size
+      )
 
-      dst = Rectangle.create(dst_x, dst_y, dst_w, dst_h)
       angle = rot * 90.0
-
-      DrawTexturePro(@tileset_texture, src, dst, @zero_vec, angle, WHITE)
+      DrawTexturePro(@tileset_texture, src, dst, center_vec, angle, WHITE)
     end
   end
 end
