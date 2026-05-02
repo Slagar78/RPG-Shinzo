@@ -23,7 +23,7 @@ class GameMap
 
   def initialize
     maps = Dir["data/maps/*.json"]
-    @src_rect_cache = {}          # <-- инициализируем до всех проверок
+    @src_rect_cache = {}
     if maps.empty?
       puts "No maps found in data/maps/"
       @width = 20
@@ -38,6 +38,10 @@ class GameMap
     @width = data['width']
     @height = data['height']
     @tiles = data['tiles']
+    @rot = data['rot'] || Array.new(@width) { Array.new(@height, 0) }
+    @mirror_x = data['mirror_x'] || Array.new(@width) { Array.new(@height, false) }
+    @mirror_y = data['mirror_y'] || Array.new(@width) { Array.new(@height, false) }
+
     if data['music']
       @music_file = data['music']['file'] || ""
       @music_volume = data['music']['volume'] || 0.8
@@ -45,29 +49,36 @@ class GameMap
       @music_file = ""
       @music_volume = 0.8
     end
-    @rot = data['rot'] || Array.new(@width) { Array.new(@height, 0) }
-    @mirror_x = data['mirror_x'] || Array.new(@width) { Array.new(@height, false) }
-    @mirror_y = data['mirror_y'] || Array.new(@width) { Array.new(@height, false) }
 
-    if File.exist?("data/tile_types/default.json")
-    @tile_types = JSON.parse(File.read("data/tile_types/default.json"))
+    # === ЗАГРУЗКА ТИПОВ ТАЙЛОВ (как в редакторе) ===
+    # Чистим путь к тайлсету: заменяем все \ на / (избавляемся от двойных экранирований)
+    raw_path = data['tileset'] || "assets/tilesets/tileset.png"
+    tileset_path = raw_path.gsub('\\', '/')         # теперь всегда с прямыми слешами
+
+    # Формируем безопасное имя файла типов (заменяем / \ : на _)
+    safe = tileset_path.gsub(/[\\\/:]/, '_')
+    type_file = "data/tile_types/#{safe}.json"
+
+    if File.exist?(type_file)
+      @tile_types = JSON.parse(File.read(type_file))
     else
       @tile_types = []
     end
 
-    tileset_path = data['tileset'] || "assets/tilesets/tileset.png"
+    # Загружаем текстуру тайлсета
     @tileset_texture = LoadTexture(tileset_path)
     @tile_size = 48
-	@dst_rect = Rectangle.create(0, 0, @tile_size, @tile_size)
+    @dst_rect = Rectangle.create(0, 0, @tile_size, @tile_size)
     @zero_vec = Vector2.create(0, 0)
+
     # Размеры тайлсета
     tex_w = @tileset_texture.width
     tex_h = @tileset_texture.height
-    @full_cols = tex_w / @tile_size   # 16
-    @full_rows = tex_h / @tile_size   # 16
-    # @half_cols = @full_cols / 2       # 8
-	total_tiles = @full_cols * @full_rows
-    # Расширяем массив типов, если он меньше нужного
+    @full_cols = tex_w / @tile_size
+    @full_rows = tex_h / @tile_size
+    total_tiles = @full_cols * @full_rows
+
+    # Расширяем массив типов, если он меньше нужного (на случай неполного файла)
     if @tile_types.length < total_tiles
       @tile_types += Array.new(total_tiles - @tile_types.length, 0)
     end
