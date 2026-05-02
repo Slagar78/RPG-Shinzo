@@ -67,6 +67,7 @@ class GameMap
 
     # Загружаем текстуру тайлсета
     @tileset_texture = LoadTexture(tileset_path)
+	SetTextureFilter(@tileset_texture, TEXTURE_FILTER_POINT)
     @tile_size = 48
     @dst_rect = Rectangle.create(0, 0, @tile_size, @tile_size)
     @zero_vec = Vector2.create(0, 0)
