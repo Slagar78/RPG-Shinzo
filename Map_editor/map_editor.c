@@ -859,14 +859,18 @@ void render_left_panel(Editor *ed) {
             if (ed->mode == MODE_C && ed->tile_types) {
                 int type = ed->tile_types[idx];
                 if (type >= 0 && type < 4 && ed->type_icons[type]) {
-                    SDL_Rect icon_dst = { dst.x + PALETTE_TILE_SIZE - 12, dst.y + PALETTE_TILE_SIZE - 12, 12, 12 };
+                    SDL_Rect icon_dst = { dst.x + PALETTE_TILE_SIZE - 16, dst.y + PALETTE_TILE_SIZE - 16, 16, 16 };
                     SDL_RenderCopy(ed->renderer, ed->type_icons[type], NULL, &icon_dst);
                 }
             }
 
             if (ed->mode == MODE_A && idx == ed->selected_tile && ed->blink_visible) {
-                SDL_SetRenderDrawColor(ed->renderer, 255, 255, 0, 255);
-                SDL_RenderDrawRect(ed->renderer, &frame);
+            SDL_SetRenderDrawColor(ed->renderer, 255, 255, 0, 255);
+            int thickness = 2;   // число пикселей толщины
+            for (int t = 0; t < thickness; t++) {
+            SDL_Rect r = { frame.x - t, frame.y - t, frame.w + 2*t, frame.h + 2*t };
+            SDL_RenderDrawRect(ed->renderer, &r);
+                }
             }
         }
     }
