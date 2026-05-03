@@ -241,6 +241,7 @@ end
 class Game
   def initialize
     # ── Окно и целевой FPS ──────────────────────
+	SetConfigFlags(FLAG_VSYNC_HINT)      # ← новая строка
     InitWindow(576, 480, "RPG Shinzo")
     SetTargetFPS(60)
 
@@ -525,10 +526,16 @@ def draw
     ClearBackground(RAYWHITE)
 
     # --- ИСПРАВЛЕНИЕ МИКРОФРИЗОВ ---
-    BeginMode2D(@camera)
-@game_map.draw_visible(@camera)
+    @snapped_camera.zoom   = @camera.zoom
+@snapped_camera.offset = @camera.offset
+@snapped_camera.target = Vector2.create(
+  @camera.target.x.round,
+  @camera.target.y.round
+)
+BeginMode2D(@snapped_camera)
+@game_map.draw_visible(@snapped_camera)
 @player.draw
-@game_map.draw_under_tiles_visible(@camera)
+@game_map.draw_under_tiles_visible(@snapped_camera)
 EndMode2D()
     # --------------------------------
 
