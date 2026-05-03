@@ -348,6 +348,7 @@ class Game
 	@active_item_action = nil   # будет хранить текущее окно (Use/Give/...)
 	@pending_items_close = false
 	@pending_menu_request = false   # ждём завершения шага, чтобы открыть меню
+	@menu_delay = 0
 
     # ── 2D-камера для следования за игроком ─────
     @camera = Camera2D.new
@@ -392,16 +393,16 @@ end
 def handle_input
   case @game_state
   when :playing
-    if IsKeyPressed(KEY_A) || IsKeyPressed(KEY_D)
-      if @player.moving
-        @pending_menu_request = true      # запоминаем
-      else
-        @game_state = :menu
-        @menu.open
-      end
+  if IsKeyPressed(KEY_A) || IsKeyPressed(KEY_D)
+    if @player.moving
+      @pending_menu_request = true
     else
-      @player.handle_input
+      @game_state = :menu
+      @menu.open
     end
+  else
+    @player.handle_input
+  end
 # меню из 4плиток
   when :menu
     if IsKeyPressed(KEY_S)
@@ -484,13 +485,25 @@ end
 
   def update
     @audio.update
-    @player.update_animation
+        @player.update_animation
     @player.update_movement if @game_state == :playing
-	if @pending_menu_request && !@player.moving
-      @pending_menu_request = false
-      @game_state = :menu
-      @menu.open
+
+    # === ОТЛОЖЕННОЕ ОТКРЫТИЕ МЕНЮ ===
+    if @pending_menu_request
+      if !@player.moving
+        @menu_delay += 1
+        if @menu_delay >= 3
+          @pending_menu_request = false
+          @menu_delay = 0
+          @game_state = :menu
+          @menu.open
+        end
+      else
+        @menu_delay = 0
+      end
     end
+    # =================================
+
     @menu.update if @game_state == :menu
 	@items_submenu.update if @game_state == :items   
 	@status_overlay.update if @game_state == :status
