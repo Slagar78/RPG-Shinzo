@@ -226,10 +226,34 @@ end
     type != 1
   end
 
-  def tile_type_at(x, y)
+    def tile_type_at(x, y)
     return 1 if x < 0 || x >= @width || y < 0 || y >= @height
     tile_id = @tiles[x][y]
     @tile_types[tile_id] || 0
+  end   # ← добавить end здесь!
+
+  def build_static_background
+    return nil if @tileset_texture.nil? || @width.nil? || @height.nil?
+    rt = LoadRenderTexture(@width * @tile_size, @height * @tile_size)
+    SetTextureFilter(rt.texture, TEXTURE_FILTER_POINT)
+
+    BeginTextureMode(rt)
+      ClearBackground(BLANK)
+      dst = Rectangle.create(0, 0, @tile_size, @tile_size)
+      zero = Vector2.create(0, 0)
+      (0...@width).each do |x|
+        (0...@height).each do |y|
+          tile_id = @tiles[x][y]
+          next if tile_id.nil? || tile_id < 0
+          src = tile_src_rect(tile_id)
+          next unless src
+          dst.x = x * @tile_size
+          dst.y = y * @tile_size
+          DrawTexturePro(@tileset_texture, src, dst, zero, 0, WHITE)
+        end
+      end
+    EndTextureMode()
+    rt
   end
 end
 
@@ -250,6 +274,8 @@ class Game
 
     # ── Карта (GameMap) ─────────────────────────
     @game_map = GameMap.new
+	@static_bg = @game_map.build_static_background
+    SetTextureFilter(@static_bg.texture, TEXTURE_FILTER_POINT) if @static_bg
 
     # ── Аудиосистема ────────────────────────────
     Raylib.InitAudioDevice()
@@ -359,6 +385,7 @@ class Game
   @audio.stop
   Raylib.CloseAudioDevice()
   Raylib.UnloadFont(@font) if @font
+  UnloadRenderTexture(@static_bg) if @static_bg
   CloseWindow()
 end
 # HANDLE INPUT
@@ -522,41 +549,50 @@ end
   end
 
 def draw
-    BeginDrawing()
-    ClearBackground(RAYWHITE)
+  BeginDrawing()
+  ClearBackground(RAYWHITE)
 
-    # --- ИСПРАВЛЕНИЕ МИКРОФРИЗОВ ---
-    @snapped_camera.zoom   = @camera.zoom
-@snapped_camera.offset = @camera.offset
-@snapped_camera.target = Vector2.create(
-  @camera.target.x.round,
-  @camera.target.y.round
-)
-BeginMode2D(@snapped_camera)
-@game_map.draw_visible(@snapped_camera)
-@player.draw
-@game_map.draw_under_tiles_visible(@snapped_camera)
-EndMode2D()
-    # --------------------------------
+  # Настраиваем snapped-камеру для чётких пикселей
+  @snapped_camera.zoom   = @camera.zoom
+  @snapped_camera.offset = @camera.offset
+  @snapped_camera.target = Vector2.create(
+    @camera.target.x.round,
+    @camera.target.y.round
+  )
 
-    case @game_state
-    when :menu
-      @menu.draw
-    when :status
-      @status_overlay.draw
-    when :magic
-      @magic_overlay.draw
-    when :profile
-      @profile.draw
-    when :items
-      @items_submenu.draw
-    when :item_action
-      @active_item_action.draw
+  BeginMode2D(@snapped_camera)
+    # --- ФОН ---
+    if @static_bg
+      # Рисуем запечённую текстуру карты, камера сама всё смещает
+    DrawTextureRec(@static_bg.texture,
+    Rectangle.create(0, 0, @static_bg.texture.width, -@static_bg.texture.height),
+    Vector2.create(0, 0),
+    WHITE)
+    else
+      # Запасной вариант, если текстура не создалась
+      @game_map.draw_visible(@snapped_camera)
     end
 
-    DrawText("FPS: #{GetFPS()}", 576 - 100, 10, 20, DARKGRAY)
-    EndDrawing()
-   end
+    # --- ИГРОК ---
+    @player.draw
+
+    # --- ВЕРХНИЕ ТАЙЛЫ (under_tiles) ---
+    @game_map.draw_under_tiles_visible(@snapped_camera)
+  EndMode2D()
+
+  # --- UI ПОВЕРХ ---
+  case @game_state
+  when :menu then @menu.draw
+  when :status then @status_overlay.draw
+  when :magic then @magic_overlay.draw
+  when :profile then @profile.draw
+  when :items then @items_submenu.draw
+  when :item_action then @active_item_action.draw
+  end
+
+  DrawText("FPS: #{GetFPS()}", 576 - 100, 10, 20, DARKGRAY)
+  EndDrawing()
+end
 end
 
 Game.new.run if __FILE__ == $0
