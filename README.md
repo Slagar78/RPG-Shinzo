@@ -82,6 +82,8 @@ gem install ocran -v 1.4.3
 выполните ---          ocran game.rb
 елси без консоли собирать то ---        ocran game.rb --windows --output Shinzo.exe
 
+ocran game.rb --add-all-core --gem-full --output RPG_Shinzo.exe
+
 ## 🚀 Быстрый старт
 
 ### Игра
