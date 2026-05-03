@@ -10,12 +10,12 @@ DIR_LEFT  = 4
 DIR_RIGHT = 6
 DIR_UP    = 8
 
-MOVE_SPEED = 0.09
-ANIM_SPEED = 12
+PIXEL_SPEED = 4         # пикселей за кадр (целое число)
+ANIM_SPEED  = 12
 
 class Player
   attr_accessor :x, :y, :direction, :pattern
-  attr_accessor :moving, :move_dir, :move_offset
+  attr_accessor :moving, :move_dir, :pixel_offset
   attr_accessor :anim_frame
   attr_accessor :can_move
   attr_accessor :map
@@ -35,15 +35,12 @@ class Player
     @pattern       = 0
     @moving        = false
     @move_dir      = DIR_DOWN
-    @move_offset   = 0.0
+    @pixel_offset  = 0        # целое смещение в пикселях (0..TILE_SIZE-1)
     @anim_frame    = 0
     @can_move      = true
-    @current_speed = MOVE_SPEED
     @just_turned   = false
 
-    # Объекты для отрисовки (кэшируем один раз)
     init_render_objects
-
     load_textures
   end
 
@@ -108,18 +105,15 @@ class Player
       return if new_x < 0 || new_x >= @map.width
       return if new_y < 0 || new_y >= @map.height
       return unless @map.passable?(new_x, new_y)
-
-      tile_type = @map.tile_type_at(new_x, new_y)
-      @current_speed = (tile_type == 2) ? MOVE_SPEED * 0.5 : MOVE_SPEED
     else
       return if new_x < 0 || new_x >= DEFAULT_GRID_W
       return if new_y < 0 || new_y >= DEFAULT_GRID_H
-      @current_speed = MOVE_SPEED
     end
 
+    # Начинаем движение: цель – соседняя клетка
     @move_dir = dir
     @moving = true
-    @move_offset = 0.0
+    @pixel_offset = 0
   end
 
   # ====================== UPDATE ======================
@@ -134,8 +128,9 @@ class Player
   def update_movement
     return unless @moving
 
-    @move_offset += @current_speed
-    if @move_offset >= 1.0
+    @pixel_offset += PIXEL_SPEED
+    if @pixel_offset >= TILE_SIZE
+      # Достигли следующей клетки
       case @move_dir
       when DIR_RIGHT then @x += 1
       when DIR_LEFT  then @x -= 1
@@ -143,7 +138,7 @@ class Player
       when DIR_UP    then @y -= 1
       end
       @moving = false
-      @move_offset = 0.0
+      @pixel_offset = 0
     end
   end
 
@@ -154,18 +149,8 @@ class Player
 
   # ====================== DRAW ======================
   def draw
-    px = (@x * TILE_SIZE).round
-    py = (@y * TILE_SIZE - 16).round
-
-    if @moving
-      offset = (@move_offset * TILE_SIZE).round
-      case @move_dir
-      when DIR_RIGHT then px += offset
-      when DIR_LEFT  then px -= offset
-      when DIR_DOWN  then py += offset
-      when DIR_UP    then py -= offset
-      end
-    end
+    px = visual_x
+    py = (@y * TILE_SIZE - 16) + (@moving ? pixel_offset_y : 0)
 
     texture = (@direction == DIR_RIGHT) ? @tex_right : @tex_left
 
@@ -186,16 +171,39 @@ class Player
 
   # ====================== VISUAL POSITION ======================
   def visual_x
-    px = @x * TILE_SIZE
-    px += @move_offset * TILE_SIZE if @moving && @move_dir == DIR_RIGHT
-    px -= @move_offset * TILE_SIZE if @moving && @move_dir == DIR_LEFT
-    px.round
+    base = @x * TILE_SIZE
+    if @moving
+      case @move_dir
+      when DIR_RIGHT then base + @pixel_offset
+      when DIR_LEFT  then base - @pixel_offset
+      else base
+      end
+    else
+      base
+    end
   end
 
   def visual_y
-    py = @y * TILE_SIZE
-    py += @move_offset * TILE_SIZE if @moving && @move_dir == DIR_DOWN
-    py -= @move_offset * TILE_SIZE if @moving && @move_dir == DIR_UP
-    py.round
+    base = @y * TILE_SIZE
+    if @moving
+      case @move_dir
+      when DIR_DOWN then base + @pixel_offset
+      when DIR_UP   then base - @pixel_offset
+      else base
+      end
+    else
+      base
+    end
+  end
+
+  private
+
+  def pixel_offset_y
+    # Для отрисовки спрайта с тем же смещением, что и камера
+    case @move_dir
+    when DIR_DOWN then @pixel_offset
+    when DIR_UP   then -@pixel_offset
+    else 0
+    end
   end
 end

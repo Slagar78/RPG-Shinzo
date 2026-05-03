@@ -139,7 +139,10 @@ def draw_visible(camera)
   end_y   = [ (view_bottom / @tile_size).ceil + 1, @height ].min
 
   half_tile = @tile_size / 2.0
-  center_vec = Vector2.create(half_tile, half_tile)  # общий вектор центра
+  # Используем повторно один Vector2 и один Rectangle
+  center_vec = @center_vec   # уже создан в initialize (или создай, если нет)
+  src_rect = Rectangle.create(0, 0, @tile_size, @tile_size)
+  dst_rect = Rectangle.create(0, 0, @tile_size, @tile_size)
 
   (start_x...end_x).each do |x|
     (start_y...end_y).each do |y|
@@ -153,19 +156,16 @@ def draw_visible(camera)
       flip_x = @mirror_x[x][y] || false
       flip_y = @mirror_y[x][y] || false
 
-      # Центр тайла в мировых координатах
       world_center_x = x * @tile_size + half_tile
       world_center_y = y * @tile_size + half_tile
 
-      dst = Rectangle.create(
-        world_center_x,                # x будет центром (origin.x внутри текстуры)
-        world_center_y,                # y
-        flip_x ? -@tile_size : @tile_size,
-        flip_y ? -@tile_size : @tile_size
-      )
+      dst_rect.x = world_center_x
+      dst_rect.y = world_center_y
+      dst_rect.width  = flip_x ? -@tile_size : @tile_size
+      dst_rect.height = flip_y ? -@tile_size : @tile_size
 
       angle = rot * 90.0
-      DrawTexturePro(@tileset_texture, src, dst, center_vec, angle, WHITE)
+      DrawTexturePro(@tileset_texture, src, dst_rect, center_vec, angle, WHITE)
     end
   end
 end
@@ -184,7 +184,9 @@ def draw_under_tiles_visible(camera)
   end_y   = [ (view_bottom / @tile_size).ceil + 1, @height ].min
 
   half_tile = @tile_size / 2.0
-  center_vec = Vector2.create(half_tile, half_tile)  # точка вращения в центре тайла
+  # Повторно используем уже созданные векторы и прямоугольники
+  center_vec = @center_vec   # создан в initialize
+  dst_rect = @dst_rect       # уже есть в initialize (или создадим один раз, если его нет)
 
   (start_x...end_x).each do |x|
     (start_y...end_y).each do |y|
@@ -192,7 +194,7 @@ def draw_under_tiles_visible(camera)
       next if tile_id.nil? || tile_id < 0
 
       type = @tile_types[tile_id] || 0
-      next unless type == 3               # рисуем только «under»-тайлы
+      next unless type == 3
 
       src = tile_src_rect(tile_id)
       next unless src
@@ -201,19 +203,16 @@ def draw_under_tiles_visible(camera)
       flip_x = @mirror_x[x][y] || false
       flip_y = @mirror_y[x][y] || false
 
-      # Центр клетки в мировых координатах
       world_center_x = x * @tile_size + half_tile
       world_center_y = y * @tile_size + half_tile
 
-      dst = Rectangle.create(
-        world_center_x,
-        world_center_y,
-        flip_x ? -@tile_size : @tile_size,
-        flip_y ? -@tile_size : @tile_size
-      )
+      dst_rect.x = world_center_x
+      dst_rect.y = world_center_y
+      dst_rect.width  = flip_x ? -@tile_size : @tile_size
+      dst_rect.height = flip_y ? -@tile_size : @tile_size
 
       angle = rot * 90.0
-      DrawTexturePro(@tileset_texture, src, dst, center_vec, angle, WHITE)
+      DrawTexturePro(@tileset_texture, src, dst_rect, center_vec, angle, WHITE)
     end
   end
 end
@@ -332,19 +331,35 @@ class Game
       @player.y * @game_map.tile_size + 24
     )
 	@snapped_camera = Camera2D.new
+	@camera_x = @camera.target.x
+    @camera_y = @camera.target.y
+	@accumulator = 0.0
+    @fixed_dt = 1.0 / 60.0
   end
 
   def run
-    until WindowShouldClose()
-      handle_input
-      update
-      draw
+  previous_time = GetTime()
+  until WindowShouldClose()
+    current_time = GetTime()
+    frame_time = current_time - previous_time
+    previous_time = current_time
+    # Предотвращаем спираль смерти, если кадр занял очень много времени
+    frame_time = 0.2 if frame_time > 0.2
+    @accumulator += frame_time
+
+    while @accumulator >= @fixed_dt
+      handle_input     # ввод можно обрабатывать каждый тик, но достаточно и раз за кадр? Оставим пока здесь для простоты
+      update            # логика двигается с постоянным dt
+      @accumulator -= @fixed_dt
     end
-	@audio.stop
-    Raylib.CloseAudioDevice()
-	Raylib.UnloadFont(@font) if @font
-    CloseWindow()
+
+    draw               # рисуем с плавающей частотой
   end
+  @audio.stop
+  Raylib.CloseAudioDevice()
+  Raylib.UnloadFont(@font) if @font
+  CloseWindow()
+end
 # HANDLE INPUT
 def handle_input
   case @game_state
@@ -484,8 +499,8 @@ end
       @game_state = :status
     end
  if @game_state == :playing
-  target_x = @player.visual_x + @game_map.tile_size / 2.0
-  target_y = @player.visual_y + @game_map.tile_size / 2.0
+  target_x = @player.visual_x + @game_map.tile_size / 2
+  target_y = @player.visual_y + @game_map.tile_size / 2
 
   half_w = 288
   half_h = 240
@@ -495,7 +510,7 @@ end
   target_x = clamp(target_x, half_w, max_x) if max_x > half_w
   target_y = clamp(target_y, half_h, max_y) if max_y > half_h
 
-  @camera.target = Vector2.create(target_x, target_y)   # ← ЖЁСТКО
+  @camera.target = Vector2.create(target_x, target_y)
 end
 	
 	# Ожидание закрытия окна Use/Give/Drop/Equip
@@ -510,17 +525,11 @@ def draw
     ClearBackground(RAYWHITE)
 
     # --- ИСПРАВЛЕНИЕ МИКРОФРИЗОВ ---
-    @snapped_camera.zoom   = @camera.zoom
-    @snapped_camera.offset = @camera.offset
-    @snapped_camera.target = Vector2.create(
-      @camera.target.x.round,
-      @camera.target.y.round
-    )
-    BeginMode2D(@snapped_camera)
-    @game_map.draw_visible(@snapped_camera)
-    @player.draw
-    @game_map.draw_under_tiles_visible(@snapped_camera)
-    EndMode2D()
+    BeginMode2D(@camera)
+@game_map.draw_visible(@camera)
+@player.draw
+@game_map.draw_under_tiles_visible(@camera)
+EndMode2D()
     # --------------------------------
 
     case @game_state
