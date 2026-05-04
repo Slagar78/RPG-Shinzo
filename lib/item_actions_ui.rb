@@ -98,6 +98,29 @@ end
 # ============================================================
 class ItemSubMenuBase
   include ItemUIHelpers
+   
+    def calculate_equip_bonuses(actor)
+    return { attack: 0, defense: 0 } unless actor
+
+    inv_entry = @start_inventory.find { |inv| inv["actor_id"] == actor["id"] }
+    return { attack: 0, defense: 0 } unless inv_entry
+
+    total_attack = 0
+    total_defense = 0
+
+    inv_entry["items"].each do |item_entry|
+      next unless item_entry["equipped"]
+      next if item_entry["item"] == "NOTHING"
+
+      item_data = find_item_by_name(item_entry["item"])
+      next unless item_data
+
+      total_attack += (item_data["attack"] || 0).to_i
+      total_defense += (item_data["defense"] || 0).to_i
+    end
+
+    { attack: total_attack, defense: total_defense }
+  end
 
   attr_reader :visible, :current_actor, :anim_phase
 
@@ -631,7 +654,11 @@ end
           hp_start = mp_start = atk_start = def_start = agi_start = mov = 0
         end
 
-        stat_values = [hp_start, mp_start, atk_start, def_start, agi_start, mov]
+        bonuses = calculate_equip_bonuses(member)
+        eff_atk = atk_start + bonuses[:attack]
+        eff_def = def_start + bonuses[:defense]
+
+        stat_values = [hp_start, mp_start, eff_atk, eff_def, agi_start, mov]
         stat_values.each_with_index do |val, idx|
           draw_text_centered_h(val.to_s, stat_centers[idx], y, 18, WHITE)
         end
@@ -686,11 +713,8 @@ class UseMenu < ItemSubMenuBase
   end
 
   def filter_items(items)
-  items.select do |entry|
-    item_data = find_item_by_name(entry["item"])
-    item_data && item_data["category"] == "consumable"
+    items.reject { |entry| entry["item"] == "NOTHING" }
   end
-end
 
   def confirm_action(item_entry, actor)
     puts "Использован предмет #{item_entry["item"]} на #{actor["name"]}"
@@ -918,7 +942,7 @@ class GiveMenu < ItemSubMenuBase
     return false unless @selected_give_item
     item_data = find_item_by_name(@selected_give_item["item"])
     return false unless item_data
-    item_data["type"] == "weapon" || item_data["type"] == "armor" || item_data["type"] == "ring" || item_data["type"] == "helm"
+    %w[Weapon Ring].include?(item_data["category"])
   end
 
   # Дополняет инвентарь до 4 слотов (NOTHING)
@@ -1005,6 +1029,9 @@ class GiveMenu < ItemSubMenuBase
         klass = @classes_data.find { |c| c["id"] == member["class_id"] }
         atk = klass ? (klass.dig("attack_growth", "start") || 0) : 0
         df  = klass ? (klass.dig("defense_growth", "start") || 0) : 0
+        bonuses = calculate_equip_bonuses(member)
+        atk += bonuses[:attack]
+        df  += bonuses[:defense]
         draw_text_centered_h(atk.to_s, @lower_x + 220, y, 18, WHITE)
         draw_text_centered_h(df.to_s,  @lower_x + 330, y, 18, WHITE)
       end
@@ -1070,10 +1097,10 @@ class EquipMenu < ItemSubMenuBase
     super(:equip, font, party, classes_data, class_names, start_inventory)
   end
 
-  def filter_items(items)
+    def filter_items(items)
     items.select do |entry|
       item_data = find_item_by_name(entry["item"])
-      item_data && (item_data["type"] == "weapon" || item_data["type"] == "armor")
+      item_data && (item_data["category"] == "Weapon" || item_data["category"] == "Ring")
     end
   end
 

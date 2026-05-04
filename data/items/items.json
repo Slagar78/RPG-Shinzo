@@ -1,71 +1,85 @@
 {
-	"items":	[{
-			"id":	0,
-			"name":	"Medical Herb",
-			"category":	"consumable",
-			"price":	10,
-			"range":	[0, 1],
-			"use_spell":	"HEAL",
-			"spell_level":	1,
-			"icon":	"assets/items/Medical_Herb.png",
-			"description":	"Восстанавливает 10 HP"
-		}, {
-			"id":	1,
-			"name":	"Healing Seed",
-			"category":	"consumable",
-			"price":	200,
-			"range":	[0, 1],
-			"use_spell":	"HEAL",
-			"spell_level":	2,
-			"icon":	"assets/items/Healing_Seed.png",
-			"description":	"Восстанавливает 20 HP"
-		}, {
-			"id":	2,
-			"name":	"Healing Drop",
-			"category":	"consumable",
-			"price":	300,
-			"range":	[0, 1],
-			"use_spell":	"HEAL",
-			"spell_level":	3,
-			"icon":	"assets/items/Healing_Drop.png",
-			"description":	"Восстанавливает 40 HP"
-		}, {
-			"id":	3,
-			"name":	"Antidote",
-			"category":	"consumable",
-			"price":	20,
-			"range":	[0, 1],
-			"use_spell":	"DETOX",
-			"spell_level":	1,
-			"icon":	"assets/items/Antidote.png",
-			"description":	"Снимает отравление"
-		}, {
-			"id":	4,
-			"name":	"Angel Wing",
-			"category":	"consumable",
-			"price":	40,
-			"range":	[0, 0],
-			"use_spell":	"EGRESS",
-			"spell_level":	1,
-			"icon":	"assets/items/Angel_Wing.png",
-			"description":	"Выход из битвы"
-		}, {
-			"id":	5,
-			"name":	"Short Sword",
-			"category":	"Weapon",
-			"price":	10,
-			"range":	[0, 1],
-			"use_spell":	"HEAL",
-			"spell_level":	1,
-			"icon":	"assets/items/Short_Sword.png"
-		}, {
-			"id":	6,
-			"name":	"Black Ring",
-			"category":	"Ring",
-			"price":	10,
-			"range":	[0, 1],
-			"use_spell":	"HEAL",
-			"spell_level":	1,
-			"icon":	"assets/items/Black_Ring.png"
-		}]
+  "items": [
+    {
+      "id": 0,
+      "name": "Medical Herb",
+      "category": "consumable",
+      "price": 10,
+      "range": [0, 1],
+      "use_spell": "HEAL",
+      "spell_level": 1,
+      "icon": "assets/items/Medical_Herb.png",
+      "description": "Восстанавливает 10 HP"
+    },
+    {
+      "id": 1,
+      "name": "Healing Seed",
+      "category": "consumable",
+      "price": 200,
+      "range": [0, 1],
+      "use_spell": "HEAL",
+      "spell_level": 2,
+      "icon": "assets/items/Healing_Seed.png",
+      "description": "Восстанавливает 20 HP"
+    },
+    {
+      "id": 2,
+      "name": "Healing Drop",
+      "category": "consumable",
+      "price": 300,
+      "range": [0, 1],
+      "use_spell": "HEAL",
+      "spell_level": 3,
+      "icon": "assets/items/Healing_Drop.png",
+      "description": "Восстанавливает 40 HP"
+    },
+    {
+      "id": 3,
+      "name": "Antidote",
+      "category": "consumable",
+      "price": 20,
+      "range": [0, 1],
+      "use_spell": "DETOX",
+      "spell_level": 1,
+      "icon": "assets/items/Antidote.png",
+      "description": "Снимает отравление"
+    },
+    {
+      "id": 4,
+      "name": "Angel Wing",
+      "category": "consumable",
+      "price": 40,
+      "range": [0, 0],
+      "use_spell": "EGRESS",
+      "spell_level": 1,
+      "icon": "assets/items/Angel_Wing.png",
+      "description": "Выход из битвы"
+    },
+    {
+      "id": 5,
+      "name": "Short Sword",
+      "category": "Weapon",
+      "price": 140,
+      "range": [1, 1],
+      "use_spell": "NOTHING",
+      "spell_level": 0,
+      "icon": "assets/items/Short_Sword.png",
+      "description": "Короткий меч. Атака +5",
+      "attack": 5,
+      "defense": 0
+    },
+    {
+      "id": 6,
+      "name": "Black Ring",
+      "category": "Ring",
+      "price": 5000,
+      "range": [0, 0],
+      "use_spell": "BLAZE",
+      "spell_level": 2,
+      "icon": "assets/items/Black_Ring.png",
+      "description": "Кольцо тьмы. Атака +10",
+      "attack": 10,
+      "defense": 0
+    }
+  ]
 }

@@ -159,6 +159,74 @@ def change_selected_actor(delta)
   end
 end
 
+  def change_selected_actor(delta)
+    return unless @party.any?
+    new_index = @selected_actor_index + delta
+    return if new_index < 0 || new_index >= @party.length
+
+    @selected_actor_index = new_index
+
+    # Автоскролл (как в JS)
+    if @selected_actor_index < @list_top_index
+      @list_top_index = @selected_actor_index
+    elsif @selected_actor_index >= @list_top_index + VISIBLE_ROWS
+      @list_top_index = @selected_actor_index - VISIBLE_ROWS + 1
+    end
+
+    # Обновляем текущего персонажа
+    @current_actor = @party[@selected_actor_index]["name"]
+    @current_items = find_actor_items(@current_actor)
+    actor = @party[@selected_actor_index]
+    portrait_name = actor ? (actor["portrait"] || actor["name"]) : @current_actor
+    @portrait_tex = load_portrait(portrait_name)
+    @blink_tex = load_blink_portrait(portrait_name)
+
+    # Обновляем заклинания
+    actor = @party[@selected_actor_index]
+    if actor
+      klass = @classes_data.find { |c| c["id"] == actor["class_id"] }
+      spell_list = (klass && klass["spell_list"]) ? klass["spell_list"] : []
+      @current_spells = spell_list.select { |spell| spell["level"] <= actor["level"] }
+    end
+  end
+
+  # ===== ВСТАВЛЯЕМЫЕ МЕТОДЫ =====
+  def find_item_by_name(name)
+    unless @items_data
+      if File.exist?("data/items/items.json")
+        data = JSON.parse(File.read("data/items/items.json"))
+        @items_data = data["items"] || []
+      else
+        @items_data = []
+      end
+    end
+    @items_data.find { |item| item["name"] == name }
+  end
+
+  def calculate_equip_bonuses(actor)
+    return { attack: 0, defense: 0 } unless actor
+
+    inv_entry = @start_inventory.find { |inv| inv["actor_id"] == actor["id"] }
+    return { attack: 0, defense: 0 } unless inv_entry
+
+    total_attack = 0
+    total_defense = 0
+
+    inv_entry["items"].each do |item_entry|
+      next unless item_entry["equipped"]
+      next if item_entry["item"] == "NOTHING"
+
+      item_data = find_item_by_name(item_entry["item"])
+      next unless item_data
+
+      total_attack += (item_data["attack"] || 0).to_i
+      total_defense += (item_data["defense"] || 0).to_i
+    end
+
+    { attack: total_attack, defense: total_defense }
+  end
+  # ===== КОНЕЦ ВСТАВКИ =====
+
   VISIBLE_ROWS = 5
   attr_reader :current_actor
   def initialize(font = nil)
@@ -659,7 +727,12 @@ end
           hp_start = mp_start = atk_start = def_start = agi_start = mov = 0
         end
 
-        stat_values = [hp_start, mp_start, atk_start, def_start, agi_start, mov]
+        # ***** НОВОЕ: бонусы от экипировки *****
+        bonuses = calculate_equip_bonuses(member)
+        eff_atk = atk_start + bonuses[:attack]
+        eff_def = def_start + bonuses[:defense]
+
+        stat_values = [hp_start, mp_start, eff_atk, eff_def, agi_start, mov]
         stat_centers = [@lower_x + 200, @lower_x + 250, @lower_x + 300, @lower_x + 350, @lower_x + 400, @lower_x + 445]
 
         stat_values.each_with_index do |val, idx|
@@ -960,8 +1033,12 @@ class Profile
       draw_text_custom("EXP   #{exp}", left_x, y_base + line_h * 3, 20, WHITE)
 
       # Правый столбец
-      draw_text_custom("ATT   #{atk_start}", right_x - 50, y_base, 20, WHITE)
-      draw_text_custom("DEF   #{def_start}", right_x - 50, y_base + line_h, 20, WHITE)
+      bonuses = calculate_equip_bonuses(actor)
+      eff_atk = atk_start + bonuses[:attack]
+      eff_def = def_start + bonuses[:defense]
+
+      draw_text_custom("ATT   #{eff_atk}", right_x - 50, y_base, 20, WHITE)
+      draw_text_custom("DEF   #{eff_def}", right_x - 50, y_base + line_h, 20, WHITE)
       draw_text_custom("AGI   #{agi_start}", right_x - 50, y_base + line_h * 2, 20, WHITE)
       draw_text_custom("MOV   #{mov}", right_x - 50, y_base + line_h * 3, 20, WHITE)
 	  	  
@@ -1118,6 +1195,29 @@ def draw_item_name(text, x, y, size, color)
     @items_data.find { |item| item["name"] == name }
   end
 
+  def calculate_equip_bonuses(actor)
+    return { attack: 0, defense: 0 } unless actor
+
+    inv_entry = @start_inventory.find { |inv| inv["actor_id"] == actor["id"] }
+    return { attack: 0, defense: 0 } unless inv_entry
+
+    total_attack = 0
+    total_defense = 0
+
+    inv_entry["items"].each do |item_entry|
+      next unless item_entry["equipped"]
+      next if item_entry["item"] == "NOTHING"
+
+      item_data = find_item_by_name(item_entry["item"])
+      next unless item_data
+
+      total_attack += (item_data["attack"] || 0).to_i
+      total_defense += (item_data["defense"] || 0).to_i
+    end
+
+    { attack: total_attack, defense: total_defense }
+  end
+
   # Найти иконку заклинания по имени и уровню в spells.json
   def find_spell_icon(name, level)
     unless @spells_data
@@ -1195,6 +1295,74 @@ def change_selected_actor(delta)
     @current_spells = spell_list.select { |spell| spell["level"] <= actor["level"] }
   end
 end
+
+  def change_selected_actor(delta)
+    return unless @party.any?
+    new_index = @selected_actor_index + delta
+    return if new_index < 0 || new_index >= @party.length
+
+    @selected_actor_index = new_index
+
+    # Автоскролл (как в JS)
+    if @selected_actor_index < @list_top_index
+      @list_top_index = @selected_actor_index
+    elsif @selected_actor_index >= @list_top_index + VISIBLE_ROWS
+      @list_top_index = @selected_actor_index - VISIBLE_ROWS + 1
+    end
+
+    # Обновляем текущего персонажа
+    @current_actor = @party[@selected_actor_index]["name"]
+    @current_items = find_actor_items(@current_actor)
+    actor = @party[@selected_actor_index]
+    portrait_name = actor ? (actor["portrait"] || actor["name"]) : @current_actor
+    @portrait_tex = load_portrait(portrait_name)
+    @blink_tex = load_blink_portrait(portrait_name)
+
+    # Обновляем заклинания
+    actor = @party[@selected_actor_index]
+    if actor
+      klass = @classes_data.find { |c| c["id"] == actor["class_id"] }
+      spell_list = (klass && klass["spell_list"]) ? klass["spell_list"] : []
+      @current_spells = spell_list.select { |spell| spell["level"] <= actor["level"] }
+    end
+  end
+
+  # ===== ВСТАВЛЯЕМЫЕ МЕТОДЫ =====
+  def find_item_by_name(name)
+    unless @items_data
+      if File.exist?("data/items/items.json")
+        data = JSON.parse(File.read("data/items/items.json"))
+        @items_data = data["items"] || []
+      else
+        @items_data = []
+      end
+    end
+    @items_data.find { |item| item["name"] == name }
+  end
+
+  def calculate_equip_bonuses(actor)
+    return { attack: 0, defense: 0 } unless actor
+
+    inv_entry = @start_inventory.find { |inv| inv["actor_id"] == actor["id"] }
+    return { attack: 0, defense: 0 } unless inv_entry
+
+    total_attack = 0
+    total_defense = 0
+
+    inv_entry["items"].each do |item_entry|
+      next unless item_entry["equipped"]
+      next if item_entry["item"] == "NOTHING"
+
+      item_data = find_item_by_name(item_entry["item"])
+      next unless item_data
+
+      total_attack += (item_data["attack"] || 0).to_i
+      total_defense += (item_data["defense"] || 0).to_i
+    end
+
+    { attack: total_attack, defense: total_defense }
+  end
+  # ===== КОНЕЦ ВСТАВКИ =====
 
   VISIBLE_ROWS = 5
   attr_reader :current_actor
@@ -1729,7 +1897,12 @@ end
           hp_start = mp_start = atk_start = def_start = agi_start = mov = 0
         end
 
-        stat_values = [hp_start, mp_start, atk_start, def_start, agi_start, mov]
+        # ***** НОВОЕ: бонусы от экипировки *****
+        bonuses = calculate_equip_bonuses(member)
+        eff_atk = atk_start + bonuses[:attack]
+        eff_def = def_start + bonuses[:defense]
+
+        stat_values = [hp_start, mp_start, eff_atk, eff_def, agi_start, mov]
         stat_centers = [@lower_x + 200, @lower_x + 250, @lower_x + 300, @lower_x + 350, @lower_x + 400, @lower_x + 445]
 
         stat_values.each_with_index do |val, idx|
