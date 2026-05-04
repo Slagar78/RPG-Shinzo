@@ -28,6 +28,13 @@ static char  use_spell[64] = {0};
 static int   spell_level = 1;
 static char  icon_path[256] = {0};
 
+// новые поля для категории и боевых характеристик
+static char  category_buf[32] = {"consumable"};
+static int   attack_val = 0;
+static int   defense_val = 0;
+static const char *category_list[] = {"consumable", "Weapon", "Ring"};
+static const int category_count = 3;
+
 static char spell_names[100][64];
 static int  spell_name_count = 0;
 static int  selected_spell_idx = -1;
@@ -134,6 +141,18 @@ static void commit_item_changes(void) {
     if (sl && cJSON_IsNumber(sl)) { sl->valueint = spell_level; sl->valuedouble = spell_level; }
     cJSON *ic = cJSON_GetObjectItem(it, "icon");
     if (ic && cJSON_IsString(ic)) cJSON_SetValuestring(ic, icon_path);
+
+    // сохраняем категорию
+    cJSON *ct = cJSON_GetObjectItem(it, "category");
+    if (ct && cJSON_IsString(ct)) cJSON_SetValuestring(ct, category_buf);
+
+    // сохраняем атаку и защиту
+    cJSON *atk = cJSON_GetObjectItem(it, "attack");
+    if (atk && cJSON_IsNumber(atk)) { atk->valueint = attack_val; atk->valuedouble = attack_val; }
+    else { cJSON_AddNumberToObject(it, "attack", attack_val); }
+    cJSON *def = cJSON_GetObjectItem(it, "defense");
+    if (def && cJSON_IsNumber(def)) { def->valueint = defense_val; def->valuedouble = defense_val; }
+    else { cJSON_AddNumberToObject(it, "defense", defense_val); }
 }
 
 static void load_item_fields(void) {
@@ -152,6 +171,16 @@ static void load_item_fields(void) {
     spell_level = cJSON_GetObjectItem(it, "spell_level")->valueint;
     const char *ic = cJSON_GetObjectItem(it, "icon")->valuestring;
     strncpy(icon_path, ic ? ic : "", 255); icon_path[255] = '\0';
+
+    // читаем категорию, атаку, защиту
+    const char *cat = cJSON_GetObjectItem(it, "category")->valuestring;
+    strncpy(category_buf, cat ? cat : "consumable", 31);
+    category_buf[31] = '\0';
+    cJSON *atk = cJSON_GetObjectItem(it, "attack");
+    attack_val = (atk && cJSON_IsNumber(atk)) ? atk->valueint : 0;
+    cJSON *def = cJSON_GetObjectItem(it, "defense");
+    defense_val = (def && cJSON_IsNumber(def)) ? def->valueint : 0;
+
     selected_spell_idx = -1;
     for (int i = 0; i < spell_name_count; i++)
         if (strcmp(spell_names[i], use_spell) == 0) { selected_spell_idx = i; break; }
@@ -159,19 +188,22 @@ static void load_item_fields(void) {
     open_item_fields();
 }
 
+// оригинальная open_item_fields, но с добавлением полей 7 (attack) и 8 (defense)
 static void open_item_fields(void) {
     item_field_count = 0;
     item_active_field = -1;
     int base_x = 360, base_y = 80, off = 100;
 
+    // 0: Name
     snprintf(item_fields[0].text, sizeof(item_fields[0].text), "%s", name_buf);
     item_fields[0].cursor = strlen(item_fields[0].text);
     item_fields[0].active = 0;
     item_fields[0].json_obj = cJSON_GetArrayItem(items, selected_item);
     item_fields[0].json_key = "name";
     item_fields[0].is_numeric = 0; item_fields[0].max_len = 20; item_fields[0].array_index = -1; item_fields[0].is_special = 0;
-    item_fields[0].rect = (SDL_Rect){base_x+off, base_y + 0*35, 190, 22};   // расширено
+    item_fields[0].rect = (SDL_Rect){base_x+off, base_y + 0*35, 190, 22};
 
+    // 1: Price
     snprintf(item_fields[1].text, sizeof(item_fields[1].text), "%d", price_val);
     item_fields[1].cursor = strlen(item_fields[1].text);
     item_fields[1].active = 0;
@@ -179,6 +211,7 @@ static void open_item_fields(void) {
     item_fields[1].is_numeric = 1; item_fields[1].max_len = 5; item_fields[1].array_index = -1; item_fields[1].is_special = 0;
     item_fields[1].rect = (SDL_Rect){base_x+off, base_y + 2*35, 150, 22};
 
+    // 2: Range Min
     snprintf(item_fields[2].text, sizeof(item_fields[2].text), "%d", range_min);
     item_fields[2].cursor = strlen(item_fields[2].text);
     item_fields[2].active = 0;
@@ -186,6 +219,7 @@ static void open_item_fields(void) {
     item_fields[2].is_numeric = 1; item_fields[2].max_len = 2; item_fields[2].array_index = 0; item_fields[2].is_special = 0;
     item_fields[2].rect = (SDL_Rect){base_x+off, base_y + 3*35, 150, 22};
 
+    // 3: Range Max
     snprintf(item_fields[3].text, sizeof(item_fields[3].text), "%d", range_max);
     item_fields[3].cursor = strlen(item_fields[3].text);
     item_fields[3].active = 0;
@@ -193,6 +227,7 @@ static void open_item_fields(void) {
     item_fields[3].is_numeric = 1; item_fields[3].max_len = 2; item_fields[3].array_index = 1; item_fields[3].is_special = 0;
     item_fields[3].rect = (SDL_Rect){base_x+off, base_y + 4*35, 150, 22};
 
+    // 4: Use Spell (special)
     snprintf(item_fields[4].text, sizeof(item_fields[4].text), "%s", use_spell);
     item_fields[4].cursor = 0;
     item_fields[4].active = 0;
@@ -200,6 +235,7 @@ static void open_item_fields(void) {
     item_fields[4].is_numeric = 0; item_fields[4].max_len = 0; item_fields[4].array_index = -1; item_fields[4].is_special = 1;
     item_fields[4].rect = (SDL_Rect){base_x+off, base_y + 5*35, 150, 22};
 
+    // 5: Spell Level (special)
     snprintf(item_fields[5].text, sizeof(item_fields[5].text), "%d", spell_level);
     item_fields[5].cursor = 0;
     item_fields[5].active = 0;
@@ -207,6 +243,7 @@ static void open_item_fields(void) {
     item_fields[5].is_numeric = 1; item_fields[5].max_len = 2; item_fields[5].array_index = -1; item_fields[5].is_special = 2;
     item_fields[5].rect = (SDL_Rect){base_x+off, base_y + 6*35, 150, 22};
 
+    // 6: Icon
     snprintf(item_fields[6].text, sizeof(item_fields[6].text), "%s", icon_path);
     item_fields[6].cursor = strlen(item_fields[6].text);
     item_fields[6].active = 0;
@@ -214,7 +251,22 @@ static void open_item_fields(void) {
     item_fields[6].is_numeric = 0; item_fields[6].max_len = 0; item_fields[6].array_index = -1; item_fields[6].is_special = 0;
     item_fields[6].rect = (SDL_Rect){base_x+off, base_y + 7*35, 150, 22};
 
-    item_field_count = 7;
+    // новые поля: 7 - Attack, 8 - Defense (позиция справа от категории)
+    snprintf(item_fields[7].text, sizeof(item_fields[7].text), "%d", attack_val);
+    item_fields[7].cursor = strlen(item_fields[7].text);
+    item_fields[7].active = 0;
+    item_fields[7].json_obj = NULL; item_fields[7].json_key = "attack";
+    item_fields[7].is_numeric = 1; item_fields[7].max_len = 4; item_fields[7].array_index = -1; item_fields[7].is_special = 0;
+    item_fields[7].rect = (SDL_Rect){720, 95, 50, 22};   // y=95 соответствует строке категории (py+10+1*35=95)
+
+    snprintf(item_fields[8].text, sizeof(item_fields[8].text), "%d", defense_val);
+    item_fields[8].cursor = strlen(item_fields[8].text);
+    item_fields[8].active = 0;
+    item_fields[8].json_obj = NULL; item_fields[8].json_key = "defense";
+    item_fields[8].is_numeric = 1; item_fields[8].max_len = 4; item_fields[8].array_index = -1; item_fields[8].is_special = 0;
+    item_fields[8].rect = (SDL_Rect){820, 95, 50, 22};
+
+    item_field_count = 9;   // теперь 9 полей (индексы 0..8)
 }
 
 static void commit_item_field(int idx) {
@@ -258,6 +310,34 @@ static void commit_item_field(int idx) {
     else if (idx == 2) range_min = atoi(f->text);
     else if (idx == 3) range_max = atoi(f->text);
     else if (idx == 6) { strncpy(icon_path, f->text, 255); icon_path[255] = '\0'; }
+    else if (idx == 7) {
+        attack_val = atoi(f->text);
+        // немедленно сохраняем в JSON
+        if (selected_item >= 0) {
+            cJSON *it = cJSON_GetArrayItem(items, selected_item);
+            cJSON *atk = cJSON_GetObjectItem(it, "attack");
+            if (atk && cJSON_IsNumber(atk)) {
+                atk->valueint = attack_val;
+                atk->valuedouble = attack_val;
+            } else {
+                cJSON_AddNumberToObject(it, "attack", attack_val);
+            }
+        }
+    }
+    else if (idx == 8) {
+        defense_val = atoi(f->text);
+        // немедленно сохраняем в JSON
+        if (selected_item >= 0) {
+            cJSON *it = cJSON_GetArrayItem(items, selected_item);
+            cJSON *def = cJSON_GetObjectItem(it, "defense");
+            if (def && cJSON_IsNumber(def)) {
+                def->valueint = defense_val;
+                def->valuedouble = defense_val;
+            } else {
+                cJSON_AddNumberToObject(it, "defense", defense_val);
+            }
+        }
+    }
     f->active = 0;
 }
 
@@ -411,6 +491,8 @@ static void add_new_item(void) {
     cJSON_AddStringToObject(it, "use_spell", "HEAL");
     cJSON_AddNumberToObject(it, "spell_level", 1);
     cJSON_AddStringToObject(it, "icon", "assets/items/empty.png");
+    cJSON_AddNumberToObject(it, "attack", 0);
+    cJSON_AddNumberToObject(it, "defense", 0);
     cJSON_AddItemToArray(items, it);
     item_count++;
     if (selected_item >= 0) commit_item_changes();
@@ -420,7 +502,6 @@ static void add_new_item(void) {
 
 static void delete_item(void) {
     if (selected_item < 0 || !items) return;
-    // Удаляем выбранный предмет из массива
     cJSON *new_arr = cJSON_CreateArray();
     for (int i = 0; i < item_count; i++) {
         if (i == selected_item) continue;
@@ -442,9 +523,6 @@ static void delete_item(void) {
 void items_reload(void) {
     if (items) { cJSON_Delete(items); items = NULL; }
     item_count = 0;
-    // Загружаем заново через глобальный items_json? Но items_json – это массив, полученный из корня, и он может указывать на удалённый объект.
-    // Безопаснее использовать функцию load_json_file из DatabaseEditor.c, но она не экспортирована.
-    // Здесь мы вызовем загрузку через fopen и cJSON_Parse самостоятельно, обновив глобальные items_json и items_count.
     FILE *f = fopen("../data/items/items.json", "rb");
     if (!f) return;
     fseek(f, 0, SEEK_END); long len = ftell(f); fseek(f, 0, SEEK_SET);
@@ -453,14 +531,9 @@ void items_reload(void) {
     if (root) {
         cJSON *arr = cJSON_GetObjectItem(root, "items");
         if (arr && cJSON_IsArray(arr)) {
-            // Удаляем старый массив из глобальной переменной (осторожно, он может использоваться)
             if (items_json) {
-                // items_json – это указатель на массив внутри старого root, который мы не хранили.
-                // Поэтому мы не можем безопасно удалить старый. Но мы можем заменить items_json новым массивом.
-                // Так как items_json используется только для чтения в этом модуле, можно просто присвоить новый.
                 items_json = arr;
                 items_count = cJSON_GetArraySize(arr);
-                // Инициализируем модуль заново
                 items = items_json;
                 item_count = items_count;
                 selected_item = -1;
@@ -521,11 +594,9 @@ void items_reset_selection(void) {
 
 void items_adjust_scroll(int delta) {
     item_scroll -= delta;
-    // Не выше первого элемента
     if (item_scroll < 0) item_scroll = 0;
-    // Не ниже последнего элемента
     int total_h = items_get_total_height();
-    int visible_h = g_window_height - 35; // 35 = tab_h + 5 (высота вкладок и отступ)
+    int visible_h = g_window_height - 35;
     int max_scroll = total_h > visible_h ? total_h - visible_h : 0;
     if (item_scroll > max_scroll) item_scroll = max_scroll;
 }
@@ -575,28 +646,88 @@ void items_draw_edit_panel(SDL_Renderer *renderer, int px, int py) {
 
     int y = py + 10;
 
-    // Name (ширина 190)
+    // Name
     draw_item_field(renderer, px+10, y, 190, 22, 0, "Name:", name_buf);
     y += 35;
 
-    cJSON *it = cJSON_GetArrayItem(items, selected_item);
-    const char *cat = cJSON_GetObjectItem(it, "category")->valuestring;
+    // ---- Интерактивная категория ----
     draw_text_ext(renderer, px+10, y+3, "Category:", white);
-    draw_text_ext(renderer, px+110, y+3, cat ? cat : "???", white);
+    SDL_Rect cat_rect = {px+110, y, 150, 22};
+    SDL_SetRenderDrawColor(renderer, gray.r, gray.g, gray.b, 255); SDL_RenderFillRect(renderer, &cat_rect);
+    SDL_SetRenderDrawColor(renderer, white.r, white.g, white.b, 255); SDL_RenderDrawRect(renderer, &cat_rect);
+    draw_text_ext(renderer, px+115, y+3, category_buf, black);
+
+    SDL_Rect cat_prev = {px+270, y, 20, 22};
+    SDL_SetRenderDrawColor(renderer, blue.r, blue.g, blue.b, 255); SDL_RenderFillRect(renderer, &cat_prev);
+    SDL_SetRenderDrawColor(renderer, white.r, white.g, white.b, 255); SDL_RenderDrawRect(renderer, &cat_prev);
+    draw_text_ext(renderer, px+275, y+3, "<", white);
+
+    SDL_Rect cat_next = {px+295, y, 20, 22};
+    SDL_SetRenderDrawColor(renderer, blue.r, blue.g, blue.b, 255); SDL_RenderFillRect(renderer, &cat_next);
+    SDL_SetRenderDrawColor(renderer, white.r, white.g, white.b, 255); SDL_RenderDrawRect(renderer, &cat_next);
+    draw_text_ext(renderer, px+300, y+3, ">", white);
+
+    // Attack / Defense (только для Weapon и Ring)
+    if (strcmp(category_buf, "consumable") != 0) {
+        // AT:
+        draw_text_ext(renderer, px+330, y+3, "AT:", white);
+        SDL_Rect atk_rect = item_fields[7].rect;
+        SDL_SetRenderDrawColor(renderer, gray.r, gray.g, gray.b, 255);
+        SDL_RenderFillRect(renderer, &atk_rect);
+        SDL_SetRenderDrawColor(renderer, white.r, white.g, white.b, 255);
+        SDL_RenderDrawRect(renderer, &atk_rect);
+        draw_text_ext(renderer, atk_rect.x+5, atk_rect.y+3, item_fields[7].text, black);
+        if (item_active_field == 7 && item_fields[7].active) {
+            char before[256] = {0};
+            if (item_fields[7].cursor > 0) {
+                strncpy(before, item_fields[7].text, item_fields[7].cursor);
+                before[item_fields[7].cursor] = '\0';
+            }
+            SDL_Surface *s = TTF_RenderUTF8_Solid(g_font, before, black);
+            int offset = atk_rect.x+5 + (s ? s->w : 0);
+            if (s) SDL_FreeSurface(s);
+            draw_text_ext(renderer, offset, atk_rect.y+3, "|", black);
+        }
+
+        // DF:
+        draw_text_ext(renderer, atk_rect.x+atk_rect.w+10, y+3, "DF:", white);
+        SDL_Rect def_rect = item_fields[8].rect;
+        SDL_SetRenderDrawColor(renderer, gray.r, gray.g, gray.b, 255);
+        SDL_RenderFillRect(renderer, &def_rect);
+        SDL_SetRenderDrawColor(renderer, white.r, white.g, white.b, 255);
+        SDL_RenderDrawRect(renderer, &def_rect);
+        draw_text_ext(renderer, def_rect.x+5, def_rect.y+3, item_fields[8].text, black);
+        if (item_active_field == 8 && item_fields[8].active) {
+            char before[256] = {0};
+            if (item_fields[8].cursor > 0) {
+                strncpy(before, item_fields[8].text, item_fields[8].cursor);
+                before[item_fields[8].cursor] = '\0';
+            }
+            SDL_Surface *s = TTF_RenderUTF8_Solid(g_font, before, black);
+            int offset = def_rect.x+5 + (s ? s->w : 0);
+            if (s) SDL_FreeSurface(s);
+            draw_text_ext(renderer, offset, def_rect.y+3, "|", black);
+        }
+    }
+
     y += 35;
 
+    // Price
     char price_str[16]; snprintf(price_str, sizeof(price_str), "%d", price_val);
     draw_item_field(renderer, px+10, y, 150, 22, 1, "Price:", price_str);
     y += 35;
 
+    // Range Min
     char rmin_str[8]; snprintf(rmin_str, sizeof(rmin_str), "%d", range_min);
     draw_item_field(renderer, px+10, y, 150, 22, 2, "Range Min:", rmin_str);
     y += 35;
 
+    // Range Max
     char rmax_str[8]; snprintf(rmax_str, sizeof(rmax_str), "%d", range_max);
     draw_item_field(renderer, px+10, y, 150, 22, 3, "Range Max:", rmax_str);
     y += 35;
 
+    // Use Spell
     draw_text_ext(renderer, px+10, y+3, "Use Spell:", white);
     SDL_Rect use_rect = {px+110, y, 150, 22};
     SDL_SetRenderDrawColor(renderer, gray.r, gray.g, gray.b, 255); SDL_RenderFillRect(renderer, &use_rect);
@@ -610,6 +741,7 @@ void items_draw_edit_panel(SDL_Renderer *renderer, int px, int py) {
     draw_text_ext(renderer, px+300, y+3, ">", white);
     y += 35;
 
+    // Spell Level
     char lvl_str[8]; snprintf(lvl_str, sizeof(lvl_str), "%d", spell_level);
     draw_text_ext(renderer, px+10, y+3, "Spell Level:", white);
     SDL_Rect lvl_rect = {px+110, y, 150, 22};
@@ -624,6 +756,7 @@ void items_draw_edit_panel(SDL_Renderer *renderer, int px, int py) {
     draw_text_ext(renderer, px+300, y+3, ">", white);
     y += 35;
 
+    // Icon
     const char *short_name = strrchr(icon_path, '/') ? strrchr(icon_path, '/')+1 : icon_path;
     draw_item_field(renderer, px+10, y, 150, 22, 6, "Icon:", short_name);
     SDL_Rect browse = {px+10+100+150+5, y, 70, 22};
@@ -632,7 +765,7 @@ void items_draw_edit_panel(SDL_Renderer *renderer, int px, int py) {
     draw_text_ext(renderer, browse.x+5, browse.y+3, "Browse", white);
     y += 40;
 
-    // Кнопки: Del Item | SAVE | Refresh | Add Item
+    // Buttons
     int btn_y = y + 5;
     SDL_Rect del_btn = {px+10, btn_y, 80, 30};
     SDL_SetRenderDrawColor(renderer, 200,80,80,255); SDL_RenderFillRect(renderer, &del_btn);
@@ -682,7 +815,7 @@ void items_handle_input(SDL_Event *evt) {
             return;
         }
 
-        // Кнопки нижнего ряда
+        // Buttons
         int btn_y = py + 10 + 7*35 + 45;
         SDL_Rect del_btn = {px+10, btn_y, 80, 30};
         SDL_Rect save_btn = {px+95, btn_y, 70, 30};
@@ -706,46 +839,79 @@ void items_handle_input(SDL_Event *evt) {
             return;
         }
 
-        // Use Spell кнопки
-        SDL_Rect prev_s = {px+270, py+10 + 5*35, 20, 22};
-        SDL_Rect next_s = {px+295, py+10 + 5*35, 20, 22};
-        if (mx >= prev_s.x && mx < prev_s.x+prev_s.w && my >= prev_s.y && my < prev_s.y+prev_s.h) {
-            if (spell_name_count > 0 && selected_spell_idx > 0) {
-                selected_spell_idx--;
-                strncpy(use_spell, spell_names[selected_spell_idx], 63);
-                update_levels_for_spell();
-                commit_item_changes();
+        // Category arrows
+        {
+            int cat_y = py + 10 + 1*35;
+            SDL_Rect cat_prev = {px+270, cat_y, 20, 22};
+            SDL_Rect cat_next = {px+295, cat_y, 20, 22};
+            if (mx >= cat_prev.x && mx < cat_prev.x+cat_prev.w && my >= cat_prev.y && my < cat_prev.y+cat_prev.h) {
+                int idx = -1;
+                for (int i = 0; i < category_count; i++)
+                    if (strcmp(category_buf, category_list[i]) == 0) { idx = i; break; }
+                if (idx > 0) {
+                    strncpy(category_buf, category_list[idx-1], 31);
+                    commit_item_changes();
+                }
+                return;
             }
-            return;
-        }
-        if (mx >= next_s.x && mx < next_s.x+next_s.w && my >= next_s.y && my < next_s.y+next_s.h) {
-            if (spell_name_count > 0 && selected_spell_idx < spell_name_count-1) {
-                selected_spell_idx++;
-                strncpy(use_spell, spell_names[selected_spell_idx], 63);
-                update_levels_for_spell();
-                commit_item_changes();
+            if (mx >= cat_next.x && mx < cat_next.x+cat_next.w && my >= cat_next.y && my < cat_next.y+cat_next.h) {
+                int idx = -1;
+                for (int i = 0; i < category_count; i++)
+                    if (strcmp(category_buf, category_list[i]) == 0) { idx = i; break; }
+                if (idx < category_count-1) {
+                    strncpy(category_buf, category_list[idx+1], 31);
+                    commit_item_changes();
+                }
+                return;
             }
-            return;
         }
 
-        // Spell Level кнопки
-        SDL_Rect prev_l = {px+270, py+10 + 6*35, 20, 22};
-        SDL_Rect next_l = {px+295, py+10 + 6*35, 20, 22};
-        if (mx >= prev_l.x && mx < prev_l.x+prev_l.w && my >= prev_l.y && my < prev_l.y+prev_l.h) {
-            if (current_level_count > 0 && selected_level_idx > 0) {
-                selected_level_idx--;
-                spell_level = current_levels[selected_level_idx];
-                commit_item_changes();
+        // Use Spell arrows
+        {
+            int us_y = py + 10 + 5*35;
+            SDL_Rect prev_s = {px+270, us_y, 20, 22};
+            SDL_Rect next_s = {px+295, us_y, 20, 22};
+            if (mx >= prev_s.x && mx < prev_s.x+prev_s.w && my >= prev_s.y && my < prev_s.y+prev_s.h) {
+                if (spell_name_count > 0 && selected_spell_idx > 0) {
+                    selected_spell_idx--;
+                    strncpy(use_spell, spell_names[selected_spell_idx], 63);
+                    update_levels_for_spell();
+                    commit_item_changes();
+                }
+                return;
             }
-            return;
+            if (mx >= next_s.x && mx < next_s.x+next_s.w && my >= next_s.y && my < next_s.y+next_s.h) {
+                if (spell_name_count > 0 && selected_spell_idx < spell_name_count-1) {
+                    selected_spell_idx++;
+                    strncpy(use_spell, spell_names[selected_spell_idx], 63);
+                    update_levels_for_spell();
+                    commit_item_changes();
+                }
+                return;
+            }
         }
-        if (mx >= next_l.x && mx < next_l.x+next_l.w && my >= next_l.y && my < next_l.y+next_l.h) {
-            if (current_level_count > 0 && selected_level_idx < current_level_count-1) {
-                selected_level_idx++;
-                spell_level = current_levels[selected_level_idx];
-                commit_item_changes();
+
+        // Spell Level arrows
+        {
+            int lv_y = py + 10 + 6*35;
+            SDL_Rect prev_l = {px+270, lv_y, 20, 22};
+            SDL_Rect next_l = {px+295, lv_y, 20, 22};
+            if (mx >= prev_l.x && mx < prev_l.x+prev_l.w && my >= prev_l.y && my < prev_l.y+prev_l.h) {
+                if (current_level_count > 0 && selected_level_idx > 0) {
+                    selected_level_idx--;
+                    spell_level = current_levels[selected_level_idx];
+                    commit_item_changes();
+                }
+                return;
             }
-            return;
+            if (mx >= next_l.x && mx < next_l.x+next_l.w && my >= next_l.y && my < next_l.y+next_l.h) {
+                if (current_level_count > 0 && selected_level_idx < current_level_count-1) {
+                    selected_level_idx++;
+                    spell_level = current_levels[selected_level_idx];
+                    commit_item_changes();
+                }
+                return;
+            }
         }
     }
 }
