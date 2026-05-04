@@ -32,8 +32,8 @@
 		}, {
 			"id":	3,
 			"name":	"Yakumo",
-			"class_id":	3,
-			"portrait":	"Rusephina",
+			"class_id":	1,
+			"portrait":	"Yakumo",
 			"mapsprite":	"hero",
 			"level":	1,
 			"exp":	0,
