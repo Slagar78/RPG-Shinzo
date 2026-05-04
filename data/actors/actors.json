@@ -34,7 +34,7 @@
 			"name":	"Yakumo",
 			"class_id":	1,
 			"portrait":	"Yakumo",
-			"mapsprite":	"hero",
+			"mapsprite":	"mapsprite002",
 			"level":	1,
 			"exp":	0,
 			"kills":	0,

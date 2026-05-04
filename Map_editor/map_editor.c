@@ -59,6 +59,7 @@ typedef struct {
     int *rot2;
     int *mirror_x2;
     int *mirror_y2;
+    int *cell_type;      // NEW: тип клетки (0-3) для сетки проходимости (width*height)
     char tileset_path[256];
     char music_file[256];
     float music_volume;
@@ -112,9 +113,11 @@ typedef struct {
     Uint32 dialog_cursor_blink;
 
     bool save_blink_active;
-	char music_fullpath[256];   // хранит полный относительный путь к музыке
-	bool dialog_just_closed;   // запрещает рисование сразу после закрытия диалога
+    char music_fullpath[256];
+    bool dialog_just_closed;
     Uint32 save_blink_time;
+
+    bool grid_mode_active;   // NEW: включена сетка назначения типов на карте
 } Editor;
 
 // Прототипы
@@ -142,11 +145,12 @@ void editor_init(Editor *ed) {
     ed->cam_x = ed->cam_y = 0;
     ed->panning = 0;
     ed->save_blink_active = false;
-	ed->music_fullpath[0] = '\0';
-	ed->dialog_just_closed = false;
+    ed->music_fullpath[0] = '\0';
+    ed->dialog_just_closed = false;
     ed->save_blink_time = 0;
     ed->dialog_active_field = 0;
     ed->dialog_cursor_blink = 0;
+    ed->grid_mode_active = false;   // NEW
     for (int i = 0; i < 4; i++) ed->type_icons[i] = NULL;
     for (int i = 0; i < 4; i++) ed->transform_icons[i] = NULL;
     ed->map_list.maps = NULL;
@@ -290,37 +294,36 @@ int load_tileset(Editor *ed, const char *path) {
     free_tileset(ed);
     char full_tileset[512];
 
-    // Если путь абсолютный (Windows), используем как есть
-if (path[0] && path[1] == ':') {
-    snprintf(full_tileset, sizeof(full_tileset), "%s", path);
-} else {
-    snprintf(full_tileset, sizeof(full_tileset), "../%s", path);
-}
+    if (path[0] && path[1] == ':') {
+        snprintf(full_tileset, sizeof(full_tileset), "%s", path);
+    } else {
+        snprintf(full_tileset, sizeof(full_tileset), "../%s", path);
+    }
     SDL_Surface *surface = IMG_Load(full_tileset);
-    if (!surface) return 0;   // добавлена точка с запятой
+    if (!surface) return 0;
 
-int cols = surface->w / TILE_SIZE;
-int rows = surface->h / TILE_SIZE;
-int palette_cols = PALETTE_COLS;   // 8
-int strips = cols / palette_cols;  // 4 для 32×32
+    int cols = surface->w / TILE_SIZE;
+    int rows = surface->h / TILE_SIZE;
+    int palette_cols = PALETTE_COLS;
+    int strips = cols / palette_cols;
 
-ed->tile_count = cols * rows;
-ed->tiles = (SDL_Texture**)malloc(ed->tile_count * sizeof(SDL_Texture*));
+    ed->tile_count = cols * rows;
+    ed->tiles = (SDL_Texture**)malloc(ed->tile_count * sizeof(SDL_Texture*));
 
-int idx = 0;
-for (int strip = 0; strip < strips; strip++) {
-    int start_col = strip * palette_cols;
-    int end_col = start_col + palette_cols;
-    for (int r = 0; r < rows; r++) {
-        for (int c = start_col; c < end_col; c++) {
-            SDL_Rect src = { c * TILE_SIZE, r * TILE_SIZE, TILE_SIZE, TILE_SIZE };
-            SDL_Surface *tile_surf = SDL_CreateRGBSurface(0, TILE_SIZE, TILE_SIZE, 32, 0,0,0,0);
-            SDL_BlitSurface(surface, &src, tile_surf, NULL);
-            ed->tiles[idx++] = SDL_CreateTextureFromSurface(ed->renderer, tile_surf);
-            SDL_FreeSurface(tile_surf);
+    int idx = 0;
+    for (int strip = 0; strip < strips; strip++) {
+        int start_col = strip * palette_cols;
+        int end_col = start_col + palette_cols;
+        for (int r = 0; r < rows; r++) {
+            for (int c = start_col; c < end_col; c++) {
+                SDL_Rect src = { c * TILE_SIZE, r * TILE_SIZE, TILE_SIZE, TILE_SIZE };
+                SDL_Surface *tile_surf = SDL_CreateRGBSurface(0, TILE_SIZE, TILE_SIZE, 32, 0,0,0,0);
+                SDL_BlitSurface(surface, &src, tile_surf, NULL);
+                ed->tiles[idx++] = SDL_CreateTextureFromSurface(ed->renderer, tile_surf);
+                SDL_FreeSurface(tile_surf);
+            }
         }
     }
-}
 
     SDL_FreeSurface(surface);
     get_relative_path(path, ed->tileset_path, sizeof(ed->tileset_path));
@@ -436,7 +439,6 @@ bool map_load_from_json(Map *map, const char *filename) {
     map->mirror_y2  = (int*)malloc(sz * sizeof(int));
     if (!map->tiles2 || !map->rot2 || !map->mirror_x2 || !map->mirror_y2) {
         free(map->tiles2); free(map->rot2); free(map->mirror_x2); free(map->mirror_y2);
-        // Освобождаем уже выделенные массивы первого слоя
         free(map->tiles); free(map->rot); free(map->mirror_x); free(map->mirror_y);
         cJSON_Delete(root); return false;
     }
@@ -464,6 +466,22 @@ bool map_load_from_json(Map *map, const char *filename) {
         for (int i = 0; i < sz; i++) map->tiles2[i] = -1;
     }
 
+    // NEW: загрузка cell_type (сетка проходимости)
+    cJSON *cell_json = cJSON_GetObjectItem(root, "collision");
+    map->cell_type = (int*)malloc(sz * sizeof(int));
+    if (cell_json && cJSON_IsArray(cell_json)) {
+        for (int x = 0; x < w; x++) {
+            cJSON *col_cell = cJSON_GetArrayItem(cell_json, x);
+            for (int y = 0; y < h; y++) {
+                int idx = x * h + y;
+                map->cell_type[idx] = (col_cell && cJSON_IsArray(col_cell) && cJSON_GetArrayItem(col_cell, y))
+                                      ? cJSON_GetArrayItem(col_cell, y)->valueint : 0;
+            }
+        }
+    } else {
+        for (int i = 0; i < sz; i++) map->cell_type[i] = 0;
+    }
+
     cJSON_Delete(root);
     return true;
 }
@@ -489,11 +507,15 @@ void map_init(Map *map, const char *name, int w, int h, const char *tileset) {
 
     for (int i = 0; i < sz; i++)
         map->tiles2[i] = -1;
+
+    // NEW: cell_type
+    map->cell_type = (int*)calloc(sz, sizeof(int));  // все 0 (passable)
 }
 
 void map_free(Map *map) {
     free(map->tiles); free(map->rot); free(map->mirror_x); free(map->mirror_y);
     free(map->tiles2); free(map->rot2); free(map->mirror_x2); free(map->mirror_y2);
+    free(map->cell_type);   // NEW
 }
 
 void find_first_tileset_path(char *out, size_t out_len) {
@@ -538,7 +560,7 @@ void map_save_to_json(const Map *map, const char *filename) {
     cJSON_AddNumberToObject(music, "volume", map->music_volume);
     cJSON_AddItemToObject(root, "music", music);
 
-    // Первый слой (всегда сохраняется)
+    // Первый слой
     cJSON *t  = cJSON_AddArrayToObject(root, "tiles");
     cJSON *r  = cJSON_AddArrayToObject(root, "rot");
     cJSON *mx = cJSON_AddArrayToObject(root, "mirror_x");
@@ -564,7 +586,7 @@ void map_save_to_json(const Map *map, const char *filename) {
         cJSON_AddItemToArray(my, col_my);
     }
 
-    // Проверяем, есть ли во втором слое хоть один тайл (не -1)
+    // Второй слой
     bool has_layer2 = false;
     int total_tiles = map->width * map->height;
     for (int i = 0; i < total_tiles; i++) {
@@ -574,7 +596,6 @@ void map_save_to_json(const Map *map, const char *filename) {
         }
     }
 
-    // Второй слой сохраняется только если он не пуст
     if (has_layer2) {
         cJSON *t2  = cJSON_AddArrayToObject(root, "tiles2");
         cJSON *r2  = cJSON_AddArrayToObject(root, "rot2");
@@ -598,6 +619,16 @@ void map_save_to_json(const Map *map, const char *filename) {
             cJSON_AddItemToArray(mx2, col_mx2);
             cJSON_AddItemToArray(my2, col_my2);
         }
+    }
+
+    // NEW: cell_type (collision)
+    cJSON *cell = cJSON_AddArrayToObject(root, "collision");
+    for (int x = 0; x < map->width; x++) {
+        cJSON *col_cell = cJSON_CreateArray();
+        for (int y = 0; y < map->height; y++) {
+            cJSON_AddItemToArray(col_cell, cJSON_CreateNumber(map->cell_type[x * map->height + y]));
+        }
+        cJSON_AddItemToArray(cell, col_cell);
     }
 
     char *str = cJSON_Print(root);
@@ -726,6 +757,11 @@ void resize_current_map(Editor *ed, int new_w, int new_h) {
     Map bigger;
     map_init(&bigger, map->name, new_w, new_h, map->tileset_path);
 
+    // Копируем музыку (FIX: сохранение при ресайзе)
+    safe_strcpy(bigger.music_file, sizeof(bigger.music_file), map->music_file);
+    bigger.music_volume = map->music_volume;
+
+    // Копируем тайлы и cell_type
     for (int x = 0; x < map->width && x < new_w; x++) {
         for (int y = 0; y < map->height && y < new_h; y++) {
             int old_idx = x * map->height + y;
@@ -740,6 +776,8 @@ void resize_current_map(Editor *ed, int new_w, int new_h) {
             bigger.rot2[new_idx]      = map->rot2[old_idx];
             bigger.mirror_x2[new_idx] = map->mirror_x2[old_idx];
             bigger.mirror_y2[new_idx] = map->mirror_y2[old_idx];
+
+            bigger.cell_type[new_idx] = map->cell_type[old_idx];  // NEW
         }
     }
 
@@ -872,7 +910,7 @@ void render_left_panel(Editor *ed) {
 
             if (ed->mode == MODE_A && idx == ed->selected_tile && ed->blink_visible) {
             SDL_SetRenderDrawColor(ed->renderer, 255, 255, 0, 255);
-            int thickness = 2;   // число пикселей толщины
+            int thickness = 2;
             for (int t = 0; t < thickness; t++) {
             SDL_Rect r = { frame.x - t, frame.y - t, frame.w + 2*t, frame.h + 2*t };
             SDL_RenderDrawRect(ed->renderer, &r);
@@ -887,7 +925,6 @@ void render_toolbar(Editor *ed) {
     SDL_SetRenderDrawColor(ed->renderer, 70, 70, 70, 255);
     SDL_RenderFillRect(ed->renderer, &bar);
 
-    // 4 кнопки для правой кнопки мыши: поворот, отражение по горизонтали, по вертикали, удаление
     struct { int x; int mode; int icon_index; } btns[] = {
         { MAP_X + 5,   RIGHT_ROTATE, 0 },
         { MAP_X + 45,  RIGHT_FLIP_H, 1 },
@@ -911,11 +948,10 @@ void render_toolbar(Editor *ed) {
         }
     }
 
-    // Кнопки видимости слоёв (сдвинуты вправо)
     int vis_btn_w = 30;
     int vis_btn_h = btn_h;
     int vis_btn_y = 3;
-    int vis_btn_x1 = MAP_X + 180;      // было 140 -> 180
+    int vis_btn_x1 = MAP_X + 180;
     int vis_btn_x2 = vis_btn_x1 + vis_btn_w + 4;
 
     SDL_Rect vis1 = { vis_btn_x1, vis_btn_y, vis_btn_w, vis_btn_h };
@@ -924,7 +960,6 @@ void render_toolbar(Editor *ed) {
     int mx, my;
     SDL_GetMouseState(&mx, &my);
 
-    // Кнопка L1
     bool hover1 = (mx >= vis1.x && mx < vis1.x+vis1.w && my >= vis1.y && my < vis1.y+vis1.h);
     SDL_Color col1 = ed->show_layer1 ? (SDL_Color){100,255,100,255} : (SDL_Color){100,100,100,255};
     if (hover1) col1 = (SDL_Color){150,255,150,255};
@@ -932,7 +967,6 @@ void render_toolbar(Editor *ed) {
     SDL_RenderFillRect(ed->renderer, &vis1);
     draw_text_centered(ed->renderer, ed->font, "L1", vis1.x + vis1.w/2, vis1.y + vis1.h/2, (SDL_Color){255,255,255,255});
 
-    // Кнопка L2
     bool hover2 = (mx >= vis2.x && mx < vis2.x+vis2.w && my >= vis2.y && my < vis2.y+vis2.h);
     SDL_Color col2 = ed->show_layer2 ? (SDL_Color){100,255,100,255} : (SDL_Color){100,100,100,255};
     if (hover2) col2 = (SDL_Color){150,255,150,255};
@@ -940,7 +974,6 @@ void render_toolbar(Editor *ed) {
     SDL_RenderFillRect(ed->renderer, &vis2);
     draw_text_centered(ed->renderer, ed->font, "L2", vis2.x + vis2.w/2, vis2.y + vis2.h/2, (SDL_Color){255,255,255,255});
 
-    // Кнопка переключения активного слоя
     int active_btn_x = vis_btn_x2 + vis_btn_w + 8;
     SDL_Rect layer_btn = { active_btn_x, 3, btn_w, btn_h };
     bool layer_hover = (mx >= layer_btn.x && mx < layer_btn.x+btn_w && my >= layer_btn.y && my < layer_btn.y+btn_h);
@@ -956,7 +989,6 @@ void render_toolbar(Editor *ed) {
     draw_text_centered(ed->renderer, ed->font, layer_label,
                        layer_btn.x + btn_w/2, layer_btn.y + btn_h/2, (SDL_Color){255,255,255,255});
 
-    // Подсказка "Active Layer" справа от кнопки
     {
         SDL_Color hint_color = {200, 200, 200, 255};
         int hint_x = active_btn_x + btn_w + 12;
@@ -971,7 +1003,7 @@ void render_toolbar(Editor *ed) {
         }
     }
 }
-	
+
 // Карта
 void render_map(Editor *ed) {
     Map *map = current_map(ed);
@@ -1020,42 +1052,66 @@ void render_map(Editor *ed) {
     }
 	
     // Второй слой
-if (ed->show_layer2) {
-    for (int x = start_x; x < end_x; x++) {
-        for (int y = start_y; y < end_y; y++) {
-            int idx = x * map->height + y;
-            int tile_id = map->tiles2[idx];
-            if (tile_id < 0 || tile_id >= ed->tile_count) continue;
+    if (ed->show_layer2) {
+        for (int x = start_x; x < end_x; x++) {
+            for (int y = start_y; y < end_y; y++) {
+                int idx = x * map->height + y;
+                int tile_id = map->tiles2[idx];
+                if (tile_id < 0 || tile_id >= ed->tile_count) continue;
 
-            SDL_Texture *tex = ed->tiles[tile_id];
-            double angle = map->rot2[idx] * 90.0;
-            SDL_RendererFlip flip = SDL_FLIP_NONE;
-            if (map->mirror_x2[idx]) flip |= SDL_FLIP_HORIZONTAL;
-            if (map->mirror_y2[idx]) flip |= SDL_FLIP_VERTICAL;
+                SDL_Texture *tex = ed->tiles[tile_id];
+                double angle = map->rot2[idx] * 90.0;
+                SDL_RendererFlip flip = SDL_FLIP_NONE;
+                if (map->mirror_x2[idx]) flip |= SDL_FLIP_HORIZONTAL;
+                if (map->mirror_y2[idx]) flip |= SDL_FLIP_VERTICAL;
 
-            SDL_FRect dst = {
-                MAP_X + (x * TILE_SIZE - ed->cam_x) * zoom,
-                MAP_Y + (y * TILE_SIZE - ed->cam_y) * zoom,
-                scaled_tile,
-                scaled_tile
-            };
-            SDL_FPoint center = { scaled_tile / 2.0f, scaled_tile / 2.0f };
+                SDL_FRect dst = {
+                    MAP_X + (x * TILE_SIZE - ed->cam_x) * zoom,
+                    MAP_Y + (y * TILE_SIZE - ed->cam_y) * zoom,
+                    scaled_tile,
+                    scaled_tile
+                };
+                SDL_FPoint center = { scaled_tile / 2.0f, scaled_tile / 2.0f };
 
-            // Полупрозрачность, только если первый слой тоже видим
-            if (ed->show_layer1) {
-                SDL_SetTextureBlendMode(tex, SDL_BLENDMODE_BLEND);   // включаем смешивание
-                SDL_SetTextureAlphaMod(tex, 96);                     // % прозрачности
-            }
-            SDL_RenderCopyExF(ed->renderer, tex, NULL, &dst, angle, &center, flip);
-            if (ed->show_layer1) {
-                SDL_SetTextureAlphaMod(tex, 255);                     // возвращаем полную непрозрачность
-                SDL_SetTextureBlendMode(tex, SDL_BLENDMODE_NONE);     // отключаем смешивание
+                if (ed->show_layer1) {
+                    SDL_SetTextureBlendMode(tex, SDL_BLENDMODE_BLEND);
+                    SDL_SetTextureAlphaMod(tex, 96);
+                }
+                SDL_RenderCopyExF(ed->renderer, tex, NULL, &dst, angle, &center, flip);
+                if (ed->show_layer1) {
+                    SDL_SetTextureAlphaMod(tex, 255);
+                    SDL_SetTextureBlendMode(tex, SDL_BLENDMODE_NONE);
+                }
             }
         }
     }
-}
 
-    // Подсветка тайла под мышью (рисуем целочисленный прямоугольник)
+     // ── Сетка типов тайлов (Grid Mode) ──
+    if (ed->grid_mode_active && map) {
+        for (int x = start_x; x < end_x; x++) {
+            for (int y = start_y; y < end_y; y++) {
+                int idx = x * map->height + y;
+                // берём ID тайла из активного слоя
+                int tile_id = (ed->current_layer == 0) ? map->tiles[idx] : map->tiles2[idx];
+                if (tile_id < 0 || tile_id >= ed->tile_count) continue;
+                int type = ed->tile_types[tile_id];
+                if (type >= 0 && type < 4 && ed->type_icons[type]) {
+                    SDL_FRect dst = {
+                        MAP_X + (x * TILE_SIZE - ed->cam_x) * zoom,
+                        MAP_Y + (y * TILE_SIZE - ed->cam_y) * zoom,
+                        scaled_tile, scaled_tile
+                    };
+                    SDL_SetTextureAlphaMod(ed->type_icons[type], 160);
+                    SDL_RenderCopyF(ed->renderer, ed->type_icons[type], NULL, &dst);
+                    SDL_SetTextureAlphaMod(ed->type_icons[type], 255);
+                }
+            }
+        }
+    }
+    // ── Конец сетки ──
+
+
+    // Подсветка тайла под мышью
     int mx, my;
     SDL_GetMouseState(&mx, &my);
     if (mx >= MAP_X && mx < MAP_X + MAP_W && my >= MAP_Y && my < MAP_Y + MAP_H) {
@@ -1071,9 +1127,9 @@ if (ed->show_layer2) {
                 (int)scaled_tile
             };
             if (ed->current_layer == 0)
-                SDL_SetRenderDrawColor(ed->renderer, 255, 255, 0, 255);   // жёлтый для слоя 1
+                SDL_SetRenderDrawColor(ed->renderer, 255, 255, 0, 255);
             else
-                SDL_SetRenderDrawColor(ed->renderer, 100, 200, 255, 255); // голубой для слоя 2
+                SDL_SetRenderDrawColor(ed->renderer, 100, 200, 255, 255);
             SDL_RenderDrawRect(ed->renderer, &hl);
         }
     }
@@ -1089,18 +1145,60 @@ void render_right_panel(Editor *ed) {
 
     draw_text_centered(ed->renderer, ed->font, "MAPS", pan_x + RIGHT_PANEL_W/2, 15, (SDL_Color){255,255,255,255});
 
-    int list_y = 35;
+    int panel_x = pan_x + 5;
+    int btn_w = RIGHT_PANEL_W - 10;
+
+    // ── Новый блок: Grid Mode ──
+    int y_current = 35;
+    // Кнопка "Grid Mode"
+    SDL_Rect grid_btn = { panel_x, y_current, btn_w, 22 };
+    int mx, my;
+    SDL_GetMouseState(&mx, &my);
+    bool hover_grid = (mx >= grid_btn.x && mx < grid_btn.x+grid_btn.w &&
+                       my >= grid_btn.y && my < grid_btn.y+grid_btn.h);
+    SDL_Color grid_bg = ed->grid_mode_active ? (SDL_Color){200, 50, 50, 255} :
+                        (hover_grid ? (SDL_Color){140,140,140,255} : (SDL_Color){100,100,100,255});
+    SDL_SetRenderDrawColor(ed->renderer, grid_bg.r, grid_bg.g, grid_bg.b, 255);
+    SDL_RenderFillRect(ed->renderer, &grid_btn);
+    draw_text_centered(ed->renderer, ed->font, "Grid Mode",
+                       grid_btn.x + grid_btn.w/2, grid_btn.y + grid_btn.h/2,
+                       (SDL_Color){255,255,255,255});
+
+    y_current += 28;
+
+    // Четыре иконки типов
+    int icon_size = 20;
+    int icon_spacing = 4;
+    int total_icons_w = 4 * icon_size + 3 * icon_spacing;
+    int start_icon_x = panel_x + (btn_w - total_icons_w) / 2;
+
+    for (int t = 0; t < 4; t++) {
+        SDL_Rect icon_rect = { start_icon_x + t * (icon_size + icon_spacing),
+                               y_current, icon_size, icon_size };
+        if (t == ed->current_type) {
+            SDL_SetRenderDrawColor(ed->renderer, 255, 255, 100, 255);
+            SDL_Rect sel = { icon_rect.x - 2, icon_rect.y - 2, icon_size+4, icon_size+4 };
+            SDL_RenderFillRect(ed->renderer, &sel);
+        }
+        if (ed->type_icons[t]) {
+            SDL_RenderCopy(ed->renderer, ed->type_icons[t], NULL, &icon_rect);
+        }
+    }
+
+    y_current += icon_size + 10;  // отступ перед списком карт
+    // ── Конец нового блока ──
+
+    // Список карт начинается ниже
+    int list_y = y_current;
     for (int i = 0; i < ed->map_list.map_count; i++) {
         SDL_Color col = (i == ed->map_list.current_map) ? (SDL_Color){0,255,0,255} : (SDL_Color){255,255,255,255};
         draw_text_centered(ed->renderer, ed->font, ed->map_list.maps[i].name, pan_x + RIGHT_PANEL_W/2, list_y + i * 20, col);
     }
 
+    // Кнопки действий (New, Save, ...) – опускаем ниже, если надо, но можно оставить на месте (WINDOW_H - 180)
     int btn_x = pan_x + 5;
-    int btn_w = RIGHT_PANEL_W - 10;
     int y = WINDOW_H - 180;
     const char *names[] = {"New Map", "Save Map", "Delete Map", "Rename Map", "Resize Map", "Set Music"};
-    int mx, my;
-    SDL_GetMouseState(&mx, &my);
 
     for (int i = 0; i < 6; i++) {
         SDL_Rect btn = { btn_x, y + i*30, btn_w, 24 };
@@ -1126,34 +1224,31 @@ void open_dialog(Editor *ed, int type) {
 
     switch (type) {
         case DIALOG_MUSIC_MAP: {
-    Map *cur = current_map(ed);
-    if (cur) {
-        // Сохраняем полный путь в music_fullpath
-        safe_strcpy(ed->music_fullpath, sizeof(ed->music_fullpath), cur->music_file);
-        // Извлекаем имя файла для отображения
-        const char *full = ed->music_fullpath;
-        const char *name = strrchr(full, '/');
-        if (!name) name = strrchr(full, '\\');
-        if (name) name++; else name = full;
-        // Обрезаем до 12 символов с троеточием
-        char display_name[64];
-        size_t len = strlen(name);
-        if (len > 12) {
-            memcpy(display_name, name, 12);
-            memcpy(display_name + 12, "...", 3);
-            display_name[15] = '\0';
-        } else {
-            strcpy(display_name, name);
+            Map *cur = current_map(ed);
+            if (cur) {
+                safe_strcpy(ed->music_fullpath, sizeof(ed->music_fullpath), cur->music_file);
+                const char *full = ed->music_fullpath;
+                const char *name = strrchr(full, '/');
+                if (!name) name = strrchr(full, '\\');
+                if (name) name++; else name = full;
+                char display_name[64];
+                size_t len = strlen(name);
+                if (len > 12) {
+                    memcpy(display_name, name, 12);
+                    memcpy(display_name + 12, "...", 3);
+                    display_name[15] = '\0';
+                } else {
+                    strcpy(display_name, name);
+                }
+                snprintf(ed->input_text, sizeof(ed->input_text), "%s", display_name);
+                snprintf(ed->input_text2, sizeof(ed->input_text2), "%.2f", cur->music_volume);
+            } else {
+                ed->music_fullpath[0] = '\0';
+                ed->input_text[0] = '\0';
+                strcpy(ed->input_text2, "0.80");
+            }
+            break;
         }
-        snprintf(ed->input_text, sizeof(ed->input_text), "%s", display_name);
-        snprintf(ed->input_text2, sizeof(ed->input_text2), "%.2f", cur->music_volume);
-    } else {
-        ed->music_fullpath[0] = '\0';
-        ed->input_text[0] = '\0';
-        strcpy(ed->input_text2, "0.80");
-    }
-    break;
-}
         default: break;
     }
 }
@@ -1162,7 +1257,7 @@ void close_dialog(Editor *ed) {
     ed->dialog_active = false;
     ed->dialog_type = DIALOG_NONE;
     ed->dialog_active_field = 0;
-	ed->dialog_just_closed = true;
+    ed->dialog_just_closed = true;
     memset(ed->input_text, 0, sizeof(ed->input_text));
     memset(ed->input_text2, 0, sizeof(ed->input_text2));
     SDL_StopTextInput();
@@ -1254,33 +1349,31 @@ void handle_dialog_click(Editor *ed, int mx, int my) {
     SDL_Rect cancel = { dlg.x + 200, dlg.y + 180, 110, 28 };
 
     if (ed->dialog_type == DIALOG_MUSIC_MAP) {
-    SDL_Rect browse_btn = { dlg.x + 280, dlg.y + 18, 65, 24 };
-    if (mx >= browse_btn.x && mx < browse_btn.x+browse_btn.w &&
-        my >= browse_btn.y && my < browse_btn.y+browse_btn.h)
-    {
-        char path[256];
-        if (open_file_dialog(path, sizeof(path))) {
-            // Сохраняем полный относительный путь
-            char rel_music[256];
-            get_relative_path(path, rel_music, sizeof(rel_music));
-            safe_strcpy(ed->music_fullpath, sizeof(ed->music_fullpath), rel_music);
-            // Извлекаем имя файла и обрезаем до 12 символов с троеточием
-            const char *bname = strrchr(rel_music, '/');
-            if (!bname) bname = strrchr(rel_music, '\\');
-            if (bname) bname++; else bname = rel_music;
-            size_t blen = strlen(bname);
-            if (blen > 12) {
-                memcpy(ed->input_text, bname, 12);
-                memcpy(ed->input_text + 12, "...", 3);
-                ed->input_text[15] = '\0';
-            } else {
-                snprintf(ed->input_text, sizeof(ed->input_text), "%s", bname);
+        SDL_Rect browse_btn = { dlg.x + 280, dlg.y + 18, 65, 24 };
+        if (mx >= browse_btn.x && mx < browse_btn.x+browse_btn.w &&
+            my >= browse_btn.y && my < browse_btn.y+browse_btn.h)
+        {
+            char path[256];
+            if (open_file_dialog(path, sizeof(path))) {
+                char rel_music[256];
+                get_relative_path(path, rel_music, sizeof(rel_music));
+                safe_strcpy(ed->music_fullpath, sizeof(ed->music_fullpath), rel_music);
+                const char *bname = strrchr(rel_music, '/');
+                if (!bname) bname = strrchr(rel_music, '\\');
+                if (bname) bname++; else bname = rel_music;
+                size_t blen = strlen(bname);
+                if (blen > 12) {
+                    memcpy(ed->input_text, bname, 12);
+                    memcpy(ed->input_text + 12, "...", 3);
+                    ed->input_text[15] = '\0';
+                } else {
+                    snprintf(ed->input_text, sizeof(ed->input_text), "%s", bname);
+                }
+                ed->dialog_active_field = 0;
             }
-            ed->dialog_active_field = 0;
+            return;
         }
-        return;
     }
-}
 
     if (mx >= ok.x && mx < ok.x+ok.w && my >= ok.y && my < ok.y+ok.h) {
         switch (ed->dialog_type) {
@@ -1304,20 +1397,18 @@ void handle_dialog_click(Editor *ed, int mx, int my) {
                 resize_current_map(ed, w, h);
                 break;
             }
-			
-    case DIALOG_MUSIC_MAP: {
-    Map *cur = current_map(ed);
-    if (cur) {
-        // Сохраняем полный путь из music_fullpath (он уже правильный)
-        safe_strcpy(cur->music_file, sizeof(cur->music_file), ed->music_fullpath);
-        cur->music_volume = (float)atof(ed->input_text2);
-        char path[128];
-        snprintf(path, sizeof(path), "../data/maps/%s.json", cur->name);
-        map_save_to_json(cur, path);
-    }
-    break;
-    }
-}
+            case DIALOG_MUSIC_MAP: {
+                Map *cur = current_map(ed);
+                if (cur) {
+                    safe_strcpy(cur->music_file, sizeof(cur->music_file), ed->music_fullpath);
+                    cur->music_volume = (float)atof(ed->input_text2);
+                    char path[128];
+                    snprintf(path, sizeof(path), "../data/maps/%s.json", cur->name);
+                    map_save_to_json(cur, path);
+                }
+                break;
+            }
+        }
         close_dialog(ed);
     } else if (mx >= cancel.x && mx < cancel.x+cancel.w && my >= cancel.y && my < cancel.y+cancel.h) {
         close_dialog(ed);
@@ -1380,7 +1471,7 @@ void handle_input(Editor *ed, bool *running) {
                     } else if (ed->dialog_type == DIALOG_RESIZE_MAP) {
                         f1 = (SDL_Rect){ dlg.x + 110, y_base - 2, 180, 24 };
                         f2 = (SDL_Rect){ dlg.x + 110, y_base + 33, 180, 24 };
-                    } else {
+                    } else { // MUSIC
                         f1 = (SDL_Rect){ dlg.x + 120, y_base - 2, 150, 24 };
                         f2 = (SDL_Rect){ dlg.x + 140, y_base + 28, 80, 24 };
                     }
@@ -1399,7 +1490,7 @@ void handle_input(Editor *ed, bool *running) {
             continue;
         }
 
-        // Обычный режим редактора
+        // Обычный режим редактора (без диалога)
         if (e.type == SDL_MOUSEWHEEL) {
             int mx, my;
             SDL_GetMouseState(&mx, &my);
@@ -1436,7 +1527,7 @@ void handle_input(Editor *ed, bool *running) {
 
         if (e.type == SDL_MOUSEBUTTONDOWN && e.button.button == SDL_BUTTON_RIGHT &&
             !(SDL_GetKeyboardState(NULL)[SDL_SCANCODE_LCTRL]) &&
-            ed->right_click_mode != 0)
+            ed->right_click_mode != 0 && !ed->grid_mode_active)  // в Grid Mode правый клик не делает трансформации
         {
             int mx = e.button.x, my = e.button.y;
             if (mx >= MAP_X && mx < MAP_X + MAP_W &&
@@ -1524,7 +1615,6 @@ void handle_input(Editor *ed, bool *running) {
 
             // Тулбар
             else if (my < TOOLBAR_H && mx >= MAP_X && mx < MAP_X + MAP_W) {
-                // Координаты кнопок (должны совпадать с render_toolbar)
                 int vis_btn_w = 30;
                 int vis_btn_x1 = MAP_X + 180;
                 int vis_btn_x2 = vis_btn_x1 + vis_btn_w + 4;
@@ -1560,24 +1650,60 @@ void handle_input(Editor *ed, bool *running) {
                 if (map && tx >= 0 && tx < map->width && ty >= 0 && ty < map->height)
                 {
                     int idx = tx * map->height + ty;
-                    if (ed->current_layer == 0) {
-                        map->tiles[idx]    = ed->selected_tile;
-                        map->rot[idx]      = 0;
-                        map->mirror_x[idx] = 0;
-                        map->mirror_y[idx] = 0;
-                    } else {
-                        map->tiles2[idx]    = ed->selected_tile;
-                        map->rot2[idx]      = 0;
-                        map->mirror_x2[idx] = 0;
-                        map->mirror_y2[idx] = 0;
+                    if (ed->grid_mode_active) {
+                        // Редактирование ГЛОБАЛЬНОГО типа тайла (tile_types)
+                        int tile_id = (ed->current_layer == 0) ? map->tiles[idx] : map->tiles2[idx];
+                        if (tile_id >= 0 && tile_id < ed->tile_count) {
+                            ed->tile_types[tile_id] = ed->current_type;
+                        }
+                    } else if (ed->mode == MODE_A) {
+                        if (ed->current_layer == 0) {
+                            map->tiles[idx]    = ed->selected_tile;
+                            map->rot[idx]      = 0;
+                            map->mirror_x[idx] = 0;
+                            map->mirror_y[idx] = 0;
+                        } else {
+                            map->tiles2[idx]    = ed->selected_tile;
+                            map->rot2[idx]      = 0;
+                            map->mirror_x2[idx] = 0;
+                            map->mirror_y2[idx] = 0;
+                        }
+                    } else if (ed->mode == MODE_C) {
+                        // Редактирование tile_types (существующая логика)
+                        int tile_id = (ed->current_layer == 0) ? map->tiles[idx] : map->tiles2[idx];
+                        if (tile_id >= 0 && tile_id < ed->tile_count) {
+                            ed->tile_types[tile_id] = ed->current_type;
+                        }
                     }
                 }
             }
 
             // Правая панель
             else if (mx >= WINDOW_W - RIGHT_PANEL_W) {
-                int list_y = 35;
+                int panel_x = WINDOW_W - RIGHT_PANEL_W + 5;
+                int btn_w = RIGHT_PANEL_W - 10;
 
+                // Новый блок Grid/иконки
+                if (my >= 35 && my < 57 && mx >= panel_x && mx < panel_x+btn_w) {
+                    ed->grid_mode_active = !ed->grid_mode_active;
+                    return;
+                }
+                if (my >= 63 && my < 83) {
+                    int icon_size = 20, icon_spacing = 4;
+                    int total_icons_w = 4*icon_size + 3*icon_spacing;
+                    int start_icon_x = panel_x + (btn_w - total_icons_w)/2;
+                    for (int t = 0; t < 4; t++) {
+                        SDL_Rect r = { start_icon_x + t*(icon_size+icon_spacing), 63, icon_size, icon_size };
+                        if (mx >= r.x && mx < r.x+r.w && my >= r.y && my < r.y+r.h) {
+                            ed->current_type = t;
+                            return;
+                        }
+                    }
+                }
+
+                // Список карт (начинается с y_current = 93, но мы не завязываемся на абсолют, проверим позже)
+                // Используем старый код: сначала проверяем клик по списку
+                int list_y = 93; // вычислено: 35+28+20+10=93
                 for (int i = 0; i < ed->map_list.map_count; i++) {
                     if (my >= list_y + i*20 - 10 && my < list_y + i*20 + 10) {
                         ed->map_list.current_map = i;
@@ -1587,6 +1713,7 @@ void handle_input(Editor *ed, bool *running) {
                     }
                 }
 
+                // Кнопки действий
                 int y = WINDOW_H - 180;
                 if (my >= y && my < y+24) {
                     open_dialog(ed, DIALOG_NEW_MAP);
@@ -1627,7 +1754,7 @@ void handle_input(Editor *ed, bool *running) {
         }
     }
 
-    // Непрерывные действия
+        // Непрерывные действия (панорамирование и рисование мышкой)
     if (ed->panning && !ed->dialog_active) {
         int mx, my;
         SDL_GetMouseState(&mx, &my);
@@ -1662,7 +1789,13 @@ void handle_input(Editor *ed, bool *running) {
             Map *map = current_map(ed);
             if (map && tx >= 0 && tx < map->width && ty >= 0 && ty < map->height) {
                 int idx = tx * map->height + ty;
-                if (ed->mode == MODE_A) {
+                if (ed->grid_mode_active) {
+                    // Заливка ГЛОБАЛЬНЫМ типом тайла при зажатой кнопке
+                    int tile_id = (ed->current_layer == 0) ? map->tiles[idx] : map->tiles2[idx];
+                    if (tile_id >= 0 && tile_id < ed->tile_count) {
+                        ed->tile_types[tile_id] = ed->current_type;
+                    }
+                } else if (ed->mode == MODE_A) {
                     if (ed->current_layer == 0) {
                         map->tiles[idx]    = ed->selected_tile;
                         map->rot[idx]      = 0;
@@ -1675,6 +1808,7 @@ void handle_input(Editor *ed, bool *running) {
                         map->mirror_y2[idx] = 0;
                     }
                 }
+                // В MODE_C для зажатой мыши ничего не делаем (типы назначаются кликом)
             }
         }
     }
@@ -1711,8 +1845,12 @@ int main(int argc, char *argv[]) {
 
     ed.window = SDL_CreateWindow("Map Editor C SDL2",
                                  SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
-                                 WINDOW_W, WINDOW_H, SDL_WINDOW_SHOWN);
+                                 WINDOW_W, WINDOW_H,
+                                 SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE);
+    SDL_SetWindowMinimumSize(ed.window, 800, 600);
     ed.renderer = SDL_CreateRenderer(ed.window, -1, SDL_RENDERER_ACCELERATED);
+    SDL_RenderSetLogicalSize(ed.renderer, WINDOW_W, WINDOW_H);
+    SDL_RenderSetIntegerScale(ed.renderer, SDL_FALSE);
 
     ed.font = TTF_OpenFont("C:/Windows/Fonts/consola.ttf", FONT_SIZE);
     if (!ed.font)
@@ -1756,7 +1894,7 @@ int main(int argc, char *argv[]) {
 
         render_left_panel(&ed);
         render_toolbar(&ed);
-        render_map(&ed);
+        render_map(&ed);        // внутри будет сетка cell_type, если grid_mode_active
         render_right_panel(&ed);
         draw_dialog(&ed);
 
