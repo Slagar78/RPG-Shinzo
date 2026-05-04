@@ -63,7 +63,7 @@
 			"spell_level":	0,
 			"icon":	"assets/items/Short_Sword.png",
 			"description":	"Короткий меч. Атака +5",
-			"attack":	15,
+			"attack":	-34,
 			"defense":	0
 		}, {
 			"id":	6,
@@ -75,7 +75,7 @@
 			"spell_level":	2,
 			"icon":	"assets/items/Black_Ring.png",
 			"description":	"Кольцо тьмы. Атака +10",
-			"attack":	10,
+			"attack":	20,
 			"defense":	5
 		}]
 }

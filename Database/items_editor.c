@@ -418,7 +418,7 @@ static int handle_item_input(SDL_Event *evt, int idx) {
     } else if (evt->type == SDL_TEXTINPUT && f->active && !f->is_special) {
         char ch = evt->text.text[0];
         if (f->is_numeric) {
-            if (isdigit(ch) || (ch == '-' && f->cursor == 0 && f->text[0] == '\0')) {
+            if (isdigit(ch) || (ch == '-' && f->cursor == 0 && (f->text[0] == '\0' || f->text[0] != '-'))) {
                 if (f->max_len > 0 && strlen(f->text) >= f->max_len) return 1;
                 if (strlen(f->text) < 255) {
                     memmove(f->text + f->cursor + 1, f->text + f->cursor, strlen(f->text) - f->cursor + 1);
