@@ -35,10 +35,13 @@ class Player
     @pattern       = 0
     @moving        = false
     @move_dir      = DIR_DOWN
-    @pixel_offset  = 0        # целое смещение в пикселях (0..TILE_SIZE-1)
+    @pixel_offset  = 0
     @anim_frame    = 0
     @can_move      = true
     @just_turned   = false
+
+    @sliding       = false
+    @slide_dir     = DIR_DOWN
 
     init_render_objects
     load_textures
@@ -67,7 +70,9 @@ class Player
 
   # ====================== INPUT ======================
   def handle_input
-    return unless @can_move && !@moving
+    return unless @can_move
+    return if @sliding
+    return if @moving
 
     @just_turned = false
 
@@ -110,35 +115,60 @@ class Player
       return if new_y < 0 || new_y >= DEFAULT_GRID_H
     end
 
-    # Начинаем движение: цель – соседняя клетка
-    @move_dir = dir
-    @moving = true
+    @slide_dir = dir
+    @move_dir  = dir
+    @moving    = true
     @pixel_offset = 0
   end
 
   # ====================== UPDATE ======================
   def update_animation
+    return if @sliding               # на льду не меняем кадр анимации
     @anim_frame += 1
     if @anim_frame >= ANIM_SPEED
       @anim_frame = 0
       @pattern = (@pattern + 1) % 2
     end
-  end
+end
 
   def update_movement
     return unless @moving
 
     @pixel_offset += PIXEL_SPEED
     if @pixel_offset >= TILE_SIZE
-      # Достигли следующей клетки
       case @move_dir
       when DIR_RIGHT then @x += 1
       when DIR_LEFT  then @x -= 1
       when DIR_DOWN  then @y += 1
       when DIR_UP    then @y -= 1
       end
-      @moving = false
-      @pixel_offset = 0
+
+      if @map && @map.tile_type_at(@x, @y) == 2   # лёд
+        next_x = @x
+        next_y = @y
+        case @move_dir
+        when DIR_RIGHT then next_x += 1
+        when DIR_LEFT  then next_x -= 1
+        when DIR_DOWN  then next_y += 1
+        when DIR_UP    then next_y -= 1
+        end
+
+        if next_x >= 0 && next_x < @map.width &&
+           next_y >= 0 && next_y < @map.height &&
+           @map.passable?(next_x, next_y)
+          @sliding = true
+          @moving  = true
+          @pixel_offset = 0
+        else
+          @sliding = false
+          @moving  = false
+          @pixel_offset = 0
+        end
+      else
+        @sliding = false
+        @moving  = false
+        @pixel_offset = 0
+      end
     end
   end
 
@@ -166,6 +196,7 @@ class Player
     @dst_rect.x = px
     @dst_rect.y = py
 
+    # Для простоты используем WHITE (без прозрачности)
     DrawTexturePro(texture, @src_rect, @dst_rect, @draw_origin, 0, WHITE)
   end
 
@@ -199,7 +230,6 @@ class Player
   private
 
   def pixel_offset_y
-    # Для отрисовки спрайта с тем же смещением, что и камера
     case @move_dir
     when DIR_DOWN then @pixel_offset
     when DIR_UP   then -@pixel_offset
