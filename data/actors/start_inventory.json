@@ -23,7 +23,7 @@
 			"level":	1,
 			"start_level":	1,
 			"items":	[{
-					"item":	"Wooden Rod",
+					"item":	"Short Sword",
 					"equipped":	true
 				}, {
 					"item":	"Medical Herb",
@@ -41,7 +41,7 @@
 			"level":	1,
 			"start_level":	1,
 			"items":	[{
-					"item":	"Short Spear",
+					"item":	"Short Sword",
 					"equipped":	true
 				}, {
 					"item":	"Medical Herb",

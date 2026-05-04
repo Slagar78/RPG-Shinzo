@@ -1,27 +1,78 @@
 @echo off
-:: РЎР±РѕСЂРєР° RPG Shinzo РІ EXE (Р±РµР· РєРѕРЅСЃРѕР»Рё)
-echo ========================================
-echo   BUILD RPG SHINZO
-echo ========================================
-echo.
+chcp 65001 >nul
+setlocal
 
-:: Р—Р°РґР°Р№С‚Рµ РёРјСЏ РІС‹С…РѕРґРЅРѕРіРѕ С„Р°Р№Р»Р°
-set EXE_NAME=Shinzo.exe
-
-echo [1/2] РЎР±РѕСЂРєР° EXE...
-ocran game.rb --windows --output %EXE_NAME%
-
-if %ERRORLEVEL% neq 0 (
-    echo.
-    echo [РћРЁРР‘РљРђ] РЎР±РѕСЂРєР° Р·Р°РІРµСЂС€РёР»Р°СЃСЊ СЃ РѕС€РёР±РєРѕР№!
-    pause
-    exit /b 1
+:: ===== перезапуск через cmd /k (чтобы не закрывался) =====
+if "%1" neq "inside" (
+    cmd /k "%~f0" inside
+    exit
 )
 
+:START
+cls
+echo ========================================
+echo      Сборка RPG-Shinzo
+echo ========================================
 echo.
-echo [2/2] Р“РѕС‚РѕРІРѕ! Р¤Р°Р№Р»: %EXE_NAME%
+
+set "BASE=%~dp0"
+set "RELEASE=%BASE%Release"
+set "LOG=%RELEASE%\build_log.txt"
+
+:: ---------- подготовка ----------
+if exist "%RELEASE%" rmdir /s /q "%RELEASE%"
+mkdir "%RELEASE%"
+
+echo Сборка: %DATE% %TIME% > "%LOG%"
+
+:: ---------- шаг 1 ----------
+echo [1/3] Копирование...
+
+xcopy "%BASE%data"   "%RELEASE%\data\"   /E /I /Y
+xcopy "%BASE%assets" "%RELEASE%\assets\" /E /I /Y
+xcopy "%BASE%lib"    "%RELEASE%\lib\"    /E /I /Y
+
+copy "%BASE%game.rb" "%RELEASE%\"
+copy "%BASE%libraylib.dll" "%RELEASE%\"
+copy "%BASE%zlib1.dll" "%RELEASE%\"
+copy "%BASE%libwinpthread-1.dll" "%RELEASE%\"
+
+if errorlevel 1 (
+    echo.
+    echo ? Ошибка копирования
+    goto END
+)
+
+echo ? Готово
+
+:: ---------- шаг 2 ----------
+echo [2/3] Сборка EXE...
+
+cd /d "%RELEASE%"
+
+ocran game.rb --output MyGame.exe --no-enc --gem-full --no-lzma --windows --dll libraylib.dll --dll zlib1.dll --dll libwinpthread-1.dll
+
+if errorlevel 1 (
+    echo.
+    echo ? Ошибка Ocran
+    goto END
+)
+
+echo ? EXE создан
+
+:: ---------- шаг 3 ----------
+echo [3/3] ГОТОВО
+echo Файл: %RELEASE%\MyGame.exe
+
+:END
 echo.
 echo ========================================
-echo   РЎР‘РћР РљРђ РЈРЎРџР•РЁРќРћ Р—РђР’Р•Р РЁР•РќРђ
+echo Нажми:
+echo [R] — пересобрать
+echo [Q] — выйти
 echo ========================================
-pause
+
+choice /c RQ /n /m "Выбор: "
+
+if errorlevel 2 exit
+if errorlevel 1 goto START
